@@ -3,15 +3,15 @@ import torch.nn.functional as F
 
 
 class ReLU(ActivationModule):
-    def __init__(self, device):
+    def __init__(self, *args, **kwargs):
         function = F.relu
         self.function = function
-        super().__init__(function, device)
+        super().__init__(function, *args, **kwargs)
 
 class LReLU(ActivationModule):
-    def __init__(self, device):
+    def __init__(self, *args, **kwargs):
         function = F.leaky_relu
-        super().__init__(function, device)
+        super().__init__(function, *args, **kwargs)
 
 class Tanh(ActivationModule):
     def __init__(self, device):

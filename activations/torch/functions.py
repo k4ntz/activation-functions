@@ -1,13 +1,14 @@
 import torch
 import torch.nn.functional as F
 from rational.utils.find_init_weights import find_weights
-from rational.utils.utils import _cleared_arrays
+from rational.utils.utils import _get_auto_axis_layout, _cleared_arrays
 from rational.utils.warnings import RationalImportScipyWarning
 from collections import OrderedDict
 import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
 from termcolor import colored
+
 
 _LINED = dict()
 
@@ -45,9 +46,9 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
             self.type = function
             function = None
         super().__init__()
-        if not type(self) in self.instances:
-            self.instances[type(self)] = []
-        self.instances[type(self)].append(self)
+        if self.classname not in self.instances:
+            self.instances[self.classname] = []
+        self.instances[self.classname].append(self)
         if function is not None:
             self.activation_function = function
             if "__forward__" in dir(function):
@@ -63,6 +64,14 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
         else:
             self.device = device
         self.use_kde = True
+
+    @property
+    def classname(self):
+        clsn = str(self.__class__)
+        if "activations.torch" in clsn:
+            return clsn.split("'")[1].split(".")[-1]
+        else:
+            return "Unknown"  # TODO, implement
 
     def input_retrieve_mode(self, auto_stop=False, max_saves=1000,
                             bin_width=0.1, mode="all", category_name=None):
@@ -141,19 +150,19 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
         self._handle_retrieve_mode = None
 
     def __repr__(self):
-        if "type" in dir(self):
-            # return  f"{self.type} ActivationModule at {hex(id(self))}"
-            return  f"{self.type} ActivationModule"
-        if "__name__" in dir(self.activation_function):
-            # return f"{self.activation_function.__name__} ActivationModule at {hex(id(self))}"
-            return f"{self.activation_function.__name__} ActivationModule"
-        return f"{self.activation_function} ActivationModule"
-
+        return f"{self.classname} Activation Function"
+        # if "type" in dir(self):
+        #     # return  f"{self.type} ActivationModule at {hex(id(self))}"
+        #     return  f"{self.type} ActivationModule"
+        # if "__name__" in dir(self.activation_function):
+        #     # return f"{self.activation_function.__name__} ActivationModule at {hex(id(self))}"
+        #     return f"{self.activation_function.__name__} ActivationModule"
+        # return f"{self.activation_function} ActivationModule"
 
     def show(self, x=None, fitted_function=True, other_func=None, display=True,
              tolerance=0.001, title=None, axis=None, writer=None, step=None, label=None,
              color=None):
-        #Construct x axis 
+        #Construct x axis
         if x is None:
             x = torch.arange(-3., 3, 0.01)
         elif isinstance(x, tuple) and len(x) in (2, 3):
@@ -375,6 +384,121 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
         if x_min == np.inf or x_max == np.inf:
             return -3, 3, 0.01
         return x_min, x_max, size
+
+    @classmethod
+    def show_all(cls, x=None, fitted_function=True, other_func=None,
+                 display=True, tolerance=0.001, title=None, axes=None,
+                 layout="auto", writer=None, step=None, colors="#1f77b4"):
+        """
+        Shows a graph of the all instanciated rational functions (or returns \
+        it if ``returns=True``).
+
+        Arguments:
+                x (range):
+                    The range to print the function on.\n
+                    Default ``None``
+                fitted_function (bool):
+                    If ``True``, displays the best fitted function if searched.
+                    Otherwise, returns it. \n
+                    Default ``True``
+                other_funcs (callable):
+                    another function to be plotted or a list of other callable
+                    functions or a dictionary with the function name as key
+                    and the callable as value.
+                display (bool):
+                    If ``True``, displays the plot.
+                    Otherwise, returns the figure. \n
+                    Default ``False``
+                tolerance (float):
+                    If the input histogram is used, it will be pruned. \n
+                    Every bin containg less than `tolerance` of the total \
+                    input is pruned out.
+                    (Reduces noise).
+                    Default ``0.001``
+                title (str):
+                    If not None, a title for the figure
+                    Default ``None``
+                axes (matplotlib.pyplot.axis):
+                    On ax or a list of axes to be plotted on. \n
+                    If None, creates them automatically (see `layout`). \n
+                    Default ``None``
+                layout (tuple or 'auto'):
+                    Grid layout of the figure. If "auto", one is generated.\n
+                    Default ``"auto"``
+                writer (tensorboardX.SummaryWriter):
+                    A tensorboardX writer to give the image to, in case of
+                    debugging.
+                    Default ``None``
+                step (int):
+                    A step/epoch for tensorboardX writer.
+                    If None, incrementing itself.
+                    Default ``None``
+        """
+        if "ActivationModule" in str(cls):
+            instances_list = []
+            [instances_list.extend(insts) for insts in cls.instances.values()]
+        else:
+            clsn = str(cls)
+            if "activations.torch" in clsn:
+                curr_classname = clsn.split("'")[1].split(".")[-1]
+                if curr_classname not in cls.instances:
+                    print(f"No instanciated function of {curr_classname} found")
+                    return
+                instances_list = cls.instances[curr_classname]
+            else:
+                print(f"Unknown {cls} for show_all")  # shall never happen
+                return
+        print(instances_list)
+        if axes is None:
+            if layout == "auto":
+                total = len(instances_list)
+                layout = _get_auto_axis_layout(total)
+            if len(layout) != 2:
+                msg = 'layout should be either "auto" or a tuple of size 2'
+                raise TypeError(msg)
+            figs = tuple(np.flip(np.array(layout)* (2, 3)))
+            try:
+                import seaborn as sns
+                with sns.axes_style("whitegrid"):
+                    fig, axes = plt.subplots(*layout, figsize=figs)
+            except ImportError:
+                RationalImportSeabornWarning.warn()
+                fig, axes = plt.subplots(*layout, figsize=figs)
+            if isinstance(axes, plt.Axes):
+                axes = np.array([axes])
+            # if display:
+            for ax in axes.flatten()[len(instances_list):]:
+                ax.remove()
+            axes = axes[:len(instances_list)]
+        elif isinstance(axes, plt.Axes):
+            axes = np.array([axes for _ in range(len(instances_list))])
+            fig = plt.gcf()
+        if isinstance(colors, str):
+            colors = [colors]*len(axes.flatten())
+        if isinstance(x, list):
+            for rat, ax, x_rat, color in zip(instances_list, axes.flatten(), x, colors):
+                rat.show(x_rat, fitted_function, other_func, False, tolerance,
+                         title, axis=ax, writer=None, step=step,
+                         color=color)
+        else:
+            for rat, ax, color in zip(instances_list, axes.flatten(), colors):
+                rat.show(x, fitted_function, other_func, False, tolerance,
+                         title, axis=ax, writer=None, step=step,
+                         color=color)
+        if title is not None:
+            fig.suptitle(title, y=0.95)
+        fig = plt.gcf()
+        fig.tight_layout()
+        if writer is not None:
+            if step is None:
+                step = cls._step
+                cls._step += 1
+            writer.add_figure(title, fig, step)
+        elif display:
+            # plt.legend()
+            plt.show()
+        else:
+            return fig
 
     # def __setattr__(self, key, value):
     #     if not hasattr(self, key):
