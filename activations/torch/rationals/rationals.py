@@ -17,7 +17,7 @@ from rational.torch.rational_pytorch_functions import Rational_PYTORCH_A_F, \
     Rational_PYTORCH_B_F, Rational_PYTORCH_C_F, Rational_PYTORCH_D_F, \
     Rational_NONSAFE_F, Rational_CUDA_NONSAFE_F, Rational_Spline_F, \
     Rational_Positive_Spline_F, _get_xps
-from .functions import ActivationModule
+from ..functions import ActivationModule
 
 
 if torch_cuda_available():

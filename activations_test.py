@@ -1,6 +1,6 @@
-from activations.torch import LReLU, ReLU, ActivationModule
+from activations.torch import LReLU, ReLU, ActivationModule, Rational
 
-for function in [LReLU, ReLU]:
+for function in [LReLU, ReLU, Rational]:
     print(f"Instanciating {function}")
     function()
 
