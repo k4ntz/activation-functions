@@ -1,3 +1,4 @@
 from .rationals import Rational, RecurrentRational, RecurrentRationalModule, \
-    RationalNonSafe, EmbeddedRational, RARE, PieceWisePositiveRational
+    RationalNonSafe, EmbeddedRational, RARE
 from .classic_activations import *
+from .learnable_activations import TentActivation

@@ -73,8 +73,8 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
         else:
             return "Unknown"  # TODO, implement
 
-    def input_retrieve_mode(self, auto_stop=False, max_saves=1000,
-                            bin_width=0.1, mode="all", category_name=None):
+    def save_inputs(self, saving=True, auto_stop=False, max_saves=1000,
+                    bin_width=0.1, mode="all", category_name=None):
         """
         Will retrieve the distribution of the input in self.distribution. \n
         This will slow down the function, as it has to retrieve the input \
@@ -102,6 +102,11 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
                     Have to be one of ``all``, ``categories``, ...
                     Default ``0``
         """
+        if not saving:
+            print("Training mode, no longer retrieving the input.")  # to log
+            self._handle_retrieve_mode.remove()
+            self._handle_retrieve_mode = None
+            return
         if self._handle_retrieve_mode is not None:
             # print("Already in retrieve mode")
             return
@@ -141,13 +146,19 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
         else:
             self._handle_retrieve_mode = self.register_forward_hook(_save_input)
 
-    def training_mode(self):
-        """
-        Stops retrieving the distribution of the input in `self.distribution`.
-        """
-        print("Training mode, no longer retrieving the input.")
-        self._handle_retrieve_mode.remove()
-        self._handle_retrieve_mode = None
+    # def training_mode(self):
+    #     """
+    #     Stops retrieving the distribution of the input in `self.distribution`.
+    #     """
+    #     print("Training mode, no longer retrieving the input.")
+    #     self._handle_retrieve_mode.remove()
+    #     self._handle_retrieve_mode = None
+
+    @classmethod
+    def save_all_inputs(cls, *args, **kwargs):
+        instances_list = cls._get_instances()
+        for instance in instances_list:
+            instance.save_inputs(*args, **kwargs)
 
     def __repr__(self):
         return f"{self.classname} Activation Function"
@@ -386,6 +397,24 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
         return x_min, x_max, size
 
     @classmethod
+    def _get_instances(cls):
+        if "ActivationModule" in str(cls):
+            instances_list = []
+            [instances_list.extend(insts) for insts in cls.instances.values()]
+        else:
+            clsn = str(cls)
+            if "activations.torch" in clsn:
+                curr_classname = clsn.split("'")[1].split(".")[-1]
+                if curr_classname not in cls.instances:
+                    print(f"No instanciated function of {curr_classname} found")
+                    return []
+                instances_list = cls.instances[curr_classname]
+            else:
+                print(f"Unknown {cls} for show_all")  # shall never happen
+                return []
+        return instances_list
+
+    @classmethod
     def show_all(cls, x=None, fitted_function=True, other_func=None,
                  display=True, tolerance=0.001, title=None, axes=None,
                  layout="auto", writer=None, step=None, colors="#1f77b4"):
@@ -434,21 +463,7 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
                     If None, incrementing itself.
                     Default ``None``
         """
-        if "ActivationModule" in str(cls):
-            instances_list = []
-            [instances_list.extend(insts) for insts in cls.instances.values()]
-        else:
-            clsn = str(cls)
-            if "activations.torch" in clsn:
-                curr_classname = clsn.split("'")[1].split(".")[-1]
-                if curr_classname not in cls.instances:
-                    print(f"No instanciated function of {curr_classname} found")
-                    return
-                instances_list = cls.instances[curr_classname]
-            else:
-                print(f"Unknown {cls} for show_all")  # shall never happen
-                return
-        print(instances_list)
+        instances_list = cls._get_instances()
         if axes is None:
             if layout == "auto":
                 total = len(instances_list)

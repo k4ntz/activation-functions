@@ -361,42 +361,42 @@ class Rational(ActivationModule, Rational_base):
             self._handle_retrieve_mode.remove()
             self._handle_retrieve_mode = None
 
-    @classmethod
-    def save_all_inputs(self, save=True, auto_stop=False, max_saves=10000,
-                        bin_width="auto"):
-        """
-        Have every rational save every input.
-
-        Arguments:
-                save (bool):
-                    If True, every instanciated rational function will \
-                    retrieve its input, else, it won't.
-                    Default ``True``
-                auto_stop (bool):
-                    If True, the retrieving will stop after `max_saves` \
-                    calls to forward.\n
-                    Else, use :meth:`torch.Rational.training_mode`.\n
-                    Default ``True``
-                max_saves (int):
-                    The range on which the curves of the functions are fitted \
-                    together.\n
-                    Default ``10000``
-                bin_width (float or "auto"):
-                    The size of the histogram's bin width to store the input \
-                    in.\n
-                    If `"auto"`, then automatically determines the bin width \
-                    to have ~100 bins.\n
-                    Default ``"auto"``
-        """
-        if save:
-            for rat in self.list:
-                rat._saving_input = True
-                rat.input_retrieve_mode(auto_stop, max_saves,
-                                        bin_width=bin_width)
-        else:
-            for rat in self.list:
-                rat._saving_input = False
-                rat.training_mode()
+    # @classmethod
+    # def save_all_inputs(self, save=True, auto_stop=False, max_saves=10000,
+    #                     bin_width="auto"):
+    #     """
+    #     Have every rational save every input.
+    #
+    #     Arguments:
+    #             save (bool):
+    #                 If True, every instanciated rational function will \
+    #                 retrieve its input, else, it won't.
+    #                 Default ``True``
+    #             auto_stop (bool):
+    #                 If True, the retrieving will stop after `max_saves` \
+    #                 calls to forward.\n
+    #                 Else, use :meth:`torch.Rational.training_mode`.\n
+    #                 Default ``True``
+    #             max_saves (int):
+    #                 The range on which the curves of the functions are fitted \
+    #                 together.\n
+    #                 Default ``10000``
+    #             bin_width (float or "auto"):
+    #                 The size of the histogram's bin width to store the input \
+    #                 in.\n
+    #                 If `"auto"`, then automatically determines the bin width \
+    #                 to have ~100 bins.\n
+    #                 Default ``"auto"``
+    #     """
+    #     if save:
+    #         for rat in self.list:
+    #             rat._saving_input = True
+    #             rat.input_retrieve_mode(auto_stop, max_saves,
+    #                                     bin_width=bin_width)
+    #     else:
+    #         for rat in self.list:
+    #             rat._saving_input = False
+    #             rat.training_mode()
 
     @property
     def saving_input(self):
@@ -417,7 +417,7 @@ class Rational(ActivationModule, Rational_base):
 class RARE(ActivationModule, Rational_base):
     # methods from rat
     saving_input = Rational.saving_input
-    save_all_inputs = Rational.save_all_inputs
+    # save_all_inputs = Rational.save_all_inputs
     training_mode = Rational.training_mode
 
     def __init__(self, approx_func="leaky_relu", degrees=(6, 4), cuda=None,

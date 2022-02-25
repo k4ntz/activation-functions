@@ -5,7 +5,7 @@ from setuptools import setup, find_packages
 from distutils.command.clean import clean
 from torch.utils.cpp_extension import BuildExtension, CUDAExtension
 from torch.cuda import is_available as torch_cuda_available
-from rational import __version__
+from activations import __version__
 import os
 # degrees = [(3, 3), (4, 4), (5, 5), (6, 6), (7, 7), (8, 8), (5, 4), (7, 6)]
 degrees = [(5, 4), (7, 6)]
@@ -118,13 +118,13 @@ constexpr uint32_t THREADS_PER_BLOCK = 512;
 if is_torch_cuda_available():
     version_names = []
     template_contents = ""
-    for template_fname in sorted(glob.glob("rational/_cuda/versions/*.cu")):
+    for template_fname in sorted(glob.glob("activations/torch/rationals/_cuda/versions/*.cu")):
         version_names.append(Path(template_fname).stem)
         with open(template_fname) as infile:
             template_contents += infile.read()
 
-    generate_cpp_module(fname='rational/_cuda/rational_cuda.cpp', versions=version_names)
-    generate_cpp_kernels_module(fname='rational/_cuda/rational_cuda_kernels.cu', template_contents=template_contents)
+    generate_cpp_module(fname='activations/torch/rationals/_cuda/rational_cuda.cpp', versions=version_names)
+    generate_cpp_kernels_module(fname='activations/torch/rationals/_cuda/rational_cuda_kernels.cu', template_contents=template_contents)
 
 
 with open("README.md", "r", encoding="utf-8") as fh:
@@ -143,8 +143,8 @@ class clean_all(clean):
         egginf = name.replace('-', '_')
         shutil.rmtree(egginf + '.egg-info')
         shutil.rmtree('dist')
-        if os.path.exists("rational/cuda.cpython-36m-x86_64-linux-gnu.so"):
-            os.remove("rational/cuda.cpython-36m-x86_64-linux-gnu.so")
+        if os.path.exists("activations/torch/rationals/cuda.cpython-36m-x86_64-linux-gnu.so"):
+            os.remove("activations/torch/rationals/cuda.cpython-36m-x86_64-linux-gnu.so")
         print("Cleaned everything")
 
 
@@ -156,7 +156,7 @@ setup(
     description="Activations functions",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/ml-research/rational_activations",
+    url="https://github.com/k4ntz/activation_functions",
     packages=find_packages(exclude=["tests"]),
     package_data={'': ['*.json']},
     include_package_data=True,
@@ -169,9 +169,9 @@ setup(
     ],
     install_requires=requirements,
     ext_modules=[
-        CUDAExtension('rational.cuda', [
-            'rational/_cuda/rational_cuda.cpp',
-            'rational/_cuda/rational_cuda_kernels.cu',
+        CUDAExtension('activations.torch.rationals.cuda', [
+            'activations/torch/rationals/_cuda/rational_cuda.cpp',
+            'activations/torch/rationals/_cuda/rational_cuda_kernels.cu',
         ],
         extra_compile_args={'cxx': [],
             'nvcc': ['-gencode=arch=compute_60,code="sm_60,compute_60"', '-lineinfo']
