@@ -55,7 +55,7 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
                 #TODO: changed to __forward__ from forward because that is what is searched for
                 self.forward = self.activation_function.__forward__
             else:
-                self.forward = lambda *args, **kwargs: self.activation_function(*args, **kwargs)
+                self.forward = self.activation_function
         self._handle_retrieve_mode = None
         self._saving_input = False
         self.distributions = []
