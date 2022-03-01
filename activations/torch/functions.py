@@ -1,8 +1,8 @@
 import torch
 import torch.nn.functional as F
-from rational.utils.find_init_weights import find_weights
-from rational.utils.utils import _get_auto_axis_layout, _cleared_arrays
-from rational.utils.warnings import RationalImportScipyWarning
+from activations.utils.find_init_weights import find_weights
+from activations.utils.utils import _get_auto_axis_layout, _cleared_arrays
+from activations.utils.warnings import RationalImportScipyWarning
 from collections import OrderedDict
 import matplotlib.pyplot as plt
 import seaborn as sns

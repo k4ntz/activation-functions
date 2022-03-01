@@ -9,10 +9,10 @@ TensorFlow/Keras, and MXNET Rational Activation Functions.
 import matplotlib.pyplot as plt
 import numpy as np
 from tqdm import tqdm
-from rational.utils.utils import Snapshot, _path_for_multiple, \
+from activations.utils.utils import Snapshot, _path_for_multiple, \
     _get_auto_axis_layout, _get_frontiers, _erase_suffix, _increment_string, \
     _repair_path, _cleared_arrays
-from rational.utils.warnings import RationalWarning, \
+from activations.utils.warnings import RationalWarning, \
     RationalImportSeabornWarning
 
 
