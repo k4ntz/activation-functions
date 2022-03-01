@@ -252,3 +252,19 @@ def Rational_version_N(x, w_array, d_array):
         Q += d_array[i] * xi
     Q = Q + np.ones_like(Q)
     return P/Q
+
+
+def RARE(x, k, w_array, d_array):
+    xi = np.ones_like(x)
+    P = np.ones_like(x) * w_array[0]
+    for i in range(len(w_array) - 1):
+        xi *= x
+        P += w_array[i+1] * xi
+    P *= (x-k)*(x+k)
+    xi = np.ones_like(x)
+    Q = np.zeros_like(x)
+    for i in range(len(d_array)):
+        xi *= x
+        Q += d_array[i] * xi
+    Q = np.abs(Q) + np.ones_like(Q)
+    return P/Q

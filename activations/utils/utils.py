@@ -5,11 +5,17 @@ from .warnings import RationalWarning, RationalImportWarning, \
     RationalImportSeabornWarning, RationalImportScipyWarning
 
 
-def _wrap_func(func, xdata, ydata, degrees):
-    def func_wrapped(params):
-        params1 = params[:degrees[0]+1]
-        params2 = params[degrees[0]+1:]
-        return func(xdata, params1, params2) - ydata
+def _wrap_func(func, xdata, ydata, degrees, k=None):
+    if k is not None:
+        def func_wrapped(params):
+            params1 = params[:degrees[0]-1]
+            params2 = params[degrees[0]-1:]
+            return func(xdata, k, params1, params2) - ydata
+    else:
+        def func_wrapped(params):
+            params1 = params[:degrees[0]+1]
+            params2 = params[degrees[0]+1:]
+            return func(xdata, params1, params2) - ydata
     return func_wrapped
 
 
@@ -23,6 +29,10 @@ def _curve_fit(f, xdata, ydata, degrees, version, p0=None, absolute_sigma=False,
     if p0 is None:
         if version == "C":
             p0 = np.ones(np.sum(degrees)+2)
+        elif version == "RARE":
+            degrees = (degrees[0] - 2, degrees[1])
+            p0 = np.random.rand(np.sum(degrees)+1)
+            p0 = np.array([-0.01962101, -0.5950948, -0.3866297,  -0.48772846, -0.09153226, 0.48737343, 0.91642022, 0.50714867, 0.8139701])/1.3
         else:
             p0 = np.ones(np.sum(degrees)+1)
     method = 'lm'
@@ -34,7 +44,8 @@ def _curve_fit(f, xdata, ydata, degrees, version, p0=None, absolute_sigma=False,
         # non-array_like `xdata`.
         xdata = np.asarray_chkfinite(xdata, float)
 
-    func = _wrap_func(f, xdata, ydata, degrees)  # Modification here  !!!
+    k = kwargs.pop("k")
+    func = _wrap_func(f, xdata, ydata, degrees, k)  # Modification here  !!!
     if callable(jac):
         jac = _wrap_jac(jac, xdata, None)
     elif jac is None and method != 'lm':
@@ -78,8 +89,14 @@ def _curve_fit(f, xdata, ydata, degrees, version, p0=None, absolute_sigma=False,
 
 def fit_rational_to_base_function(rational_func, ref_func, x, degrees=(5, 4), version="A"):
     y = ref_func(x)
+    if version.lower() == "rare":
+        k = np.abs(x)
+    else:
+        k = None
     final_params = _curve_fit(rational_func, x, y, degrees=degrees, version=version,
-                              maxfev=10000000)[0]
+                              maxfev=10000000, k=k)[0]
+    if k is not None:
+        return np.array(final_params[:degrees[0]-1]), np.array(final_params[degrees[0]-1:])
     return np.array(final_params[:degrees[0]+1]), np.array(final_params[degrees[0]+1:])
 
 

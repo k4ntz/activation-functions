@@ -9,8 +9,8 @@ import numpy as np
 from .utils import fit_rational_to_base_function
 import torch
 import os
-from rational.numpy.rationals import Rational_version_A, Rational_version_B, \
-    Rational_version_C, Rational_version_N
+from activations.numpy.rationals import Rational_version_A, Rational_version_B, \
+    Rational_version_C, Rational_version_N, RARE
 
 
 def plot_result(x_array, rational_array, target_array,
@@ -143,7 +143,7 @@ def find_weights(function, function_name=None, degrees=None, bounds=None,
     x = np.arange(lb, ub, step)
     if version is None:
         version = typed_input("Rational Version: ", str,
-                              ["A", "B", "C", "D", "N"])
+                              ["A", "B", "C", "D", "N", "RARE"])
     if version == 'A':
         rational = Rational_version_A
     elif version == 'B':
@@ -154,16 +154,22 @@ def find_weights(function, function_name=None, degrees=None, bounds=None,
         rational = Rational_version_B
     elif version == 'N':
         rational = Rational_version_N
+    elif version == 'RARE':
+        rational = RARE
 
     w_params, d_params = fit_rational_to_base_function(rational, function_to_approx, x,
-                                                       degrees=degrees,
-                                                       version=version)
+                                                       degrees=degrees, version=version)
     print(f"Found coeffient :\nP: {w_params}\nQ: {d_params}")
     if plot is None:
         plot = input("Do you want a plot of the result (y/n)") in ["y", "yes"]
     if plot:
-        plot_result(x, rational(x, w_params, d_params), function_to_approx(x),
-                    function_name)
+        if version == 'RARE':
+            k = ub
+            plot_result(x, rational(x, k, w_params, d_params), function_to_approx(x),
+                        function_name)
+        else:
+            plot_result(x, rational(x, w_params, d_params), function_to_approx(x),
+                        function_name)
     params = {"version": version, "name": function_name, "ub": ub, "lb": lb,
               "nd": nd, "dd": dd}
     if save is None:
