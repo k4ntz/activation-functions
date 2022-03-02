@@ -112,14 +112,14 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
             return
         if "cuda" in self.device:
             if "layer" in mode.lower():
-                from rational.utils.histograms_cupy import LayerHistogram as Histogram
+                from .utils.histograms_cupy import LayerHistogram as Histogram
             else:
-                from rational.utils.histograms_cupy import Histogram
+                from .utils.histograms_cupy import Histogram
         else:
             if "layer" in mode.lower():
-                from rational.utils.histograms_numpy import LayerHistogram as Histogram
+                from .utils.histograms_numpy import LayerHistogram as Histogram
             else:
-                from rational.utils.histograms_numpy import Histogram
+                from .utils.histograms_numpy import Histogram
         if "categor" in mode.lower():
             #TODO: is this valid, in this case no histogram is constructed which most likely leads to an error
             if category_name is None:
@@ -161,7 +161,7 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
             instance.save_inputs(*args, **kwargs)
 
     def __repr__(self):
-        return f"{self.classname} Activation Function"
+        return f"{self.classname}"
         # if "type" in dir(self):
         #     # return  f"{self.type} ActivationModule at {hex(id(self))}"
         #     return  f"{self.type} ActivationModule"
@@ -225,14 +225,14 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
             return
         if "cuda" in self.device:
             if "layer" in self._irm.lower():
-                from rational.utils.histograms_cupy import LayerHistogram as Histogram
+                from .utils.histograms_cupy import LayerHistogram as Histogram
             else:
-                from rational.utils.histograms_cupy import Histogram
+                from .utils.histograms_cupy import Histogram
         else:
             if "layer" in self._irm.lower():
-                from rational.utils.histograms_numpy import LayerHistogram as Histogram
+                from .utils.histograms_numpy import LayerHistogram as Histogram
             else:
-                from rational.utils.histograms_numpy import Histogram
+                from .utils.histograms_numpy import Histogram
         self._selected_distribution = Histogram(self._inp_bin_width)
         self.distributions.append(self._selected_distribution)
         self.categories.append(value)

@@ -418,7 +418,7 @@ class RARE(ActivationModule, Rational_base):
     saving_input = Rational.saving_input
     training_mode = Rational.training_mode
 
-    def __init__(self, approx_func="onesin", degrees=(6, 4), cuda=None,
+    def __init__(self, approx_func="onesin", degrees=(5, 4), cuda=None,
                  k=2., k_trainable=True, name=None):
         if name is None:
             name = f"Piecewise Rational {degrees}"
