@@ -24,8 +24,10 @@ def plot_result(x_array, rational_array, target_array,
     fig.show()
 
 
-def append_to_config_file(params, approx_name, w_params, d_params, overwrite=None):
+def append_to_config_file(params, approx_name, w_params, d_params, overwrite=None, k=None):
     rational_full_name = f'Rational_version_{params["version"]}{params["nd"]}/{params["dd"]}'
+    if params["version"].lower() == 'rare':
+        rational_full_name += f"_k_{k}"
     cfd = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
     with open(f'{cfd}/rationals_config.json') as json_file:
         rationals_dict = json.load(json_file)  # rational_version -> approx_func
@@ -80,7 +82,7 @@ FUNCTION = None
 
 
 def find_weights(function, function_name=None, degrees=None, bounds=None,
-                 version=None, plot=None, save=None, overwrite=None):
+                 version=None, plot=None, save=None, overwrite=None, k=None):
     """
     Finds the weights of the numerator and the denominator of the rational function.
     Beside `function`, all parameters can be left to the default ``None``. \n
@@ -136,6 +138,7 @@ def find_weights(function, function_name=None, degrees=None, bounds=None,
         print("On what range should the function be approximated ?")
         lb = typed_input("lower bound: ", float)
         ub = typed_input("upper bound: ", float)
+
     else:
         lb, ub = bounds
     nb_points = 100000
@@ -156,6 +159,9 @@ def find_weights(function, function_name=None, degrees=None, bounds=None,
         rational = Rational_version_N
     elif version == 'RARE':
         rational = RARE
+        if k is None:
+            print("What is the k limit of the RARE function ?")
+            k = typed_input("k: ", float)
 
     w_params, d_params = fit_rational_to_base_function(rational, function_to_approx, x,
                                                        degrees=degrees, version=version)
@@ -164,7 +170,6 @@ def find_weights(function, function_name=None, degrees=None, bounds=None,
         plot = input("Do you want a plot of the result (y/n)") in ["y", "yes"]
     if plot:
         if version == 'RARE':
-            k = ub
             plot_result(x, rational(x, k, w_params, d_params), function_to_approx(x),
                         function_name)
         else:
@@ -175,7 +180,7 @@ def find_weights(function, function_name=None, degrees=None, bounds=None,
     if save is None:
         save = input("Do you want to store them in the json file ? (y/n)") in ["y", "yes"]
     if save:
-        append_to_config_file(params, function_name, w_params, d_params, overwrite)
+        append_to_config_file(params, function_name, w_params, d_params, overwrite, k)
     else:
         print("Parameters not stored")
         return w_params, d_params

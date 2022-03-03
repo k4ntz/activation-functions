@@ -1032,7 +1032,7 @@
    "lb": -3.0
   }
  },
- "Rational_version_RARE6/4": {
+ "Rational_version_RARE6/4_k_2.0": {
   "onesin": {
    "init_w_numerator": [
     -0.015093084615384616,
@@ -1051,7 +1051,7 @@
    "lb": -2
   }
  },
- "Rational_version_RARE5/4": {
+ "Rational_version_RARE5/4_k_2.0": {
   "onesin": {
    "init_w_numerator": [
     -0.015093084615384616,
@@ -1067,6 +1067,43 @@
    ],
    "ub": 2,
    "lb": -2
+  }
+ },
+ "Rational_version_RARE6/4_k_1.0": {
+  "onesin": {
+   "init_w_numerator": [
+    -0.0528,
+    -1.6022,
+    -1.0409,
+    -1.3131,
+    -0.2464
+   ],
+   "init_w_denominator": [
+    0.3749,
+    0.7049,
+    0.3901,
+    0.6261
+   ],
+   "ub": 1,
+   "lb": -1
+  }
+ },
+ "Rational_version_RARE5/4_k_1.0": {
+  "onesin": {
+   "init_w_numerator": [
+    -0.0528,
+    -1.6022,
+    -1.0409,
+    -1.3131
+   ],
+   "init_w_denominator": [
+    0.3749,
+    0.7049,
+    0.3901,
+    0.6261
+   ],
+   "ub": 1,
+   "lb": -1
   }
  }
 }

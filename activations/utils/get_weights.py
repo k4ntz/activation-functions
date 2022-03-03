@@ -14,7 +14,7 @@ known_functions = {
     "normal": lambda x: 1/np.sqrt(2*np.pi) * np.exp(-.5*x**2),
 }
 
-def get_parameters(rational_version, degrees, approx_func):
+def get_parameters(rational_version, degrees, approx_func, k=None):
     nd, dd = degrees
     if approx_func == "identity":
         return [0., 1.] + [0.] * (nd - 1), [0.] * dd
@@ -23,6 +23,7 @@ def get_parameters(rational_version, degrees, approx_func):
     rational_full_name = f"Rational_version_{rational_version.upper()}{nd}/{dd}"
     if rational_version.lower() == "rare":
         nd -= 2
+        rational_full_name += f"_k_{k}"
     config_file = '../rationals_config.json'
     config_file_dir = str(Path(os.path.abspath(__file__)).parent)
     url = "https://rational-activations.readthedocs.io/en/latest/tutorials/tutorials.1_find_weights_for_initialization.html"
@@ -42,7 +43,9 @@ def get_parameters(rational_version, degrees, approx_func):
             \nWe need to add it.\nLet's do do it now. \n--> More info:"
             print(colored(msg, "yellow"))
             print(colored(url, "blue"))
-            return
+            find_weights(known_functions[approx_func.lower()], function_name=approx_func.lower(), degrees=degrees, version=rational_version)
+            with open(os.path.join(config_file_dir, config_file)) as json_file:
+                rationals_dict = json.load(json_file)
     if approx_func not in rationals_dict[rational_full_name]:
         if approx_func.lower() in known_functions:
             msg = f"Found {approx_func} but haven't computed its rational approximation yet for degrees {degrees}.\

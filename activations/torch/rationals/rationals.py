@@ -419,9 +419,9 @@ class RARE(ActivationModule, Rational_base):
     training_mode = Rational.training_mode
 
     def __init__(self, approx_func="onesin", degrees=(6, 4), cuda=None,
-                 k=2., k_trainable=True, name=None):
+                 k=1., k_trainable=True, name=None):
         if name is None:
-            name = f"Piecewise Rational {degrees}"
+            name = f"RARE {degrees}"
         ActivationModule.__init__(self, name)
         Rational_base.__init__(self, name)
 
@@ -442,7 +442,7 @@ class RARE(ActivationModule, Rational_base):
         # self.denominator = nn.Parameter(torch.randn(_n).to(device),
         #                                 requires_grad=True)
         w_numerator, w_denominator = get_parameters("rare", (_m, _n),
-                                                    approx_func)
+                                                    approx_func, k=k)
 
         self.numerator = nn.Parameter(torch.FloatTensor(w_numerator).to(device),
                                       requires_grad=True)

@@ -32,7 +32,7 @@ def _curve_fit(f, xdata, ydata, degrees, version, p0=None, absolute_sigma=False,
         elif version == "RARE":
             degrees = (degrees[0] - 2, degrees[1])
             p0 = np.random.rand(np.sum(degrees)+1)
-            p0 = np.array([-0.01962101, -0.5950948, -0.3866297,  -0.48772846, -0.09153226, 0.48737343, 0.91642022, 0.50714867, 0.8139701])/1.3
+            p0 = np.array([-0.0528, -1.6022, -1.0409, -1.3131, 0.3749, 0.7049, 0.3901, 0.6261])
         else:
             p0 = np.ones(np.sum(degrees)+1)
     method = 'lm'
