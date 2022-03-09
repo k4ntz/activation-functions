@@ -147,6 +147,7 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
         self._inp_bin_width = bin_width
         if auto_stop:
             self.inputs_saved = 0
+            print("tst")
             self._handle_retrieve_mode = self.register_forward_hook(_save_input_auto_stop)
             self._max_saves = max_saves
         else:
