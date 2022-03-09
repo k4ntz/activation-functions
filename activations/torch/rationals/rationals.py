@@ -437,6 +437,10 @@ class RARE(ActivationModule, Rational_base):
         self.k = nn.Parameter(torch.FloatTensor([k]).to(device),
                               requires_grad=k_trainable)
         _m, _n = degrees
+        # self.numerator = nn.Parameter(-1 * torch.ones(_m-2).to(device),
+        #                               requires_grad=True)
+        # self.denominator = nn.Parameter(torch.ones(_n).to(device),
+        #                                 requires_grad=True)
         # self.numerator = nn.Parameter(torch.randn(_m-2).to(device),
         #                               requires_grad=True)
         # self.denominator = nn.Parameter(torch.randn(_n).to(device),
