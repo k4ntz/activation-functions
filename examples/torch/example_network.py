@@ -113,11 +113,12 @@ testLoader = DL(test_data, batch_size=64, shuffle=True)
 
 model = MnistCNN()
 
-num_epochs = 2
+num_epochs = 1
 
-# train(num_epochs, model, trainLaoder)
 # save and load if possible
-ReLU.save_all_inputs()
+ReLU.save_all_inputs(category_name="train")
+train(num_epochs, model, trainLaoder)
+ReLU.save_all_inputs(category_name="eval")
 eval(model, testLoader)
-ReLU.save_all_inputs(saving=False)
 ReLU.show_all()
+ReLU.save_all_inputs(saving=False)
