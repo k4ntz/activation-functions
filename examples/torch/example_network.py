@@ -1,3 +1,4 @@
+from numpy import full
 from torchvision import datasets
 from torchvision.transforms import ToTensor
 from torch.utils.data import DataLoader as DL
@@ -9,7 +10,7 @@ import torch
 
 
 class MnistCNN(nn.Module):
-    def __init__(self):
+    def __init__(self, *args, **kwargs):
         super().__init__()
 
         self.l1 = nn.Sequential(nn.Conv2d(
@@ -46,6 +47,16 @@ class MnistCNN(nn.Module):
         x = x.view(x.size(0), -1)
         output = self.l3(x)
         return output
+
+
+def save_model(model, save_name):
+    full_pth = f"./models/{save_name}"
+    torch.save(model.state_dict(), full_pth)
+
+def load_model(model_name, modeltype=MnistCNN, *args, **kwargs):
+    model = modeltype(*args, **kwargs)
+    model.load_state_dict(torch.load(f"./models/{model_name}"))
+    return model
 
 
 def train(epochs, model, trainDataLoader):

@@ -3,6 +3,7 @@ import torch.nn.functional as F
 from activations.utils.find_init_weights import find_weights
 from activations.utils.utils import _get_auto_axis_layout, _cleared_arrays
 from activations.utils.warnings import RationalImportScipyWarning
+from activations.utils.activation_logger import ActivationLogger
 from collections import OrderedDict
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -14,11 +15,17 @@ _LINED = dict()
 
 
 def _save_input(self, input, output):
+    if self._selected_distribution is None: 
+        self.logger.critical("No distribution was assigned, cannot fill it")
+        raise ValueError("Selected distribution is none")
     self._selected_distribution.fill_n(input[0])
 
 
 def _save_input_auto_stop(self, input, output):
     self.inputs_saved += 1
+    if self._selected_distribution is None: 
+        self.logger.critical("No distribution was assigned, cannot fill it")
+        raise ValueError("Selected distribution is none")
     self._selected_distribution.fill_n(input[0])
     if self.inputs_saved > self._max_saves:
         self.training_mode()
@@ -46,13 +53,13 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
             self.type = function
             function = None
         super().__init__()
+        self.logger = ActivationLogger(f"ActivationLogger: {function}")
         if self.classname not in self.instances:
             self.instances[self.classname] = []
         self.instances[self.classname].append(self)
         if function is not None:
             self.activation_function = function
             if "__forward__" in dir(function):
-                #TODO: changed to __forward__ from forward because that is what is searched for
                 self.forward = self.activation_function.__forward__
             else:
                 self.forward = self.activation_function
@@ -103,7 +110,7 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
                     Default ``0``
         """
         if not saving:
-            print("Training mode, no longer retrieving the input.")  # to log
+            self.logger.warn("Not retrieving input anymore for showing")
             self._handle_retrieve_mode.remove()
             self._handle_retrieve_mode = None
             return
@@ -121,7 +128,6 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
             else:
                 from .utils.histograms_numpy import Histogram
         if "categor" in mode.lower():
-            #TODO: is this valid, in this case no histogram is constructed which most likely leads to an error
             if category_name is None:
                 self._selected_distribution_name = None
                 self.categories = []
@@ -156,6 +162,9 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
 
     @classmethod
     def save_all_inputs(cls, *args, **kwargs):
+        """
+        Saves inputs for all instantiates objects of the called class. 
+        """
         instances_list = cls._get_instances()
         for instance in instances_list:
             instance.save_inputs(*args, **kwargs)
@@ -208,7 +217,7 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
             try:
                 writer.add_figure(title, fig, step)
             except AttributeError:
-                print("Could not use the given SummaryWriter to add the Rational figure")
+                self.logger.error("Could not use the given SummaryWriter to add the Rational figure")
         elif display:
             plt.show()
         else:
@@ -273,7 +282,7 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
                         fill = ax.fill_between(refined_bins, kde_curv, alpha=0.45,
                                                color=color, label=inp_label)
                     else:
-                        print("The bin size is too big, bins contain too few "
+                        self.logger.warn("The bin size is too big, bins contain too few "
                               "elements.\nbins:", x)
                         fill = ax.bar([], []) # in case of remove needed
                     size = x[1] - x[0]
@@ -345,7 +354,7 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
                         fill = ax.fill_between(refined_bins, kde_curv, alpha=0.4,
                                                 color=color, label=f"{inp_label} ({n})")
                     else:
-                        print("The bin size is too big, bins contain too few "
+                        self.logger.warn("The bin size is too big, bins contain too few "
                               "elements.\nbins:", x)
                         fill = ax.bar([], []) # in case of remove needed
                 else:
@@ -419,7 +428,7 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
                  display=True, tolerance=0.001, title=None, axes=None,
                  layout="auto", writer=None, step=None, colors="#1f77b4"):
         """
-        Shows a graph of the all instanciated rational functions (or returns \
+        Shows a graph of the all instanciated activation functions (or returns \
         it if ``returns=True``).
 
         Arguments:
@@ -463,6 +472,7 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
                     If None, incrementing itself.
                     Default ``None``
         """
+        logger = ActivationLogger("f{cls.__name__}Logger")
         instances_list = cls._get_instances()
         if axes is None:
             if layout == "auto":
@@ -477,7 +487,8 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
                 with sns.axes_style("whitegrid"):
                     fig, axes = plt.subplots(*layout, figsize=figs)
             except ImportError:
-                RationalImportSeabornWarning.warn()
+                logger.warn("Could not import seaborn")
+                #RationalImportSeabornWarning.warn()
                 fig, axes = plt.subplots(*layout, figsize=figs)
             if isinstance(axes, plt.Axes):
                 axes = np.array([axes])
@@ -544,7 +555,6 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
 
 if __name__ == '__main__':
     def plot_gaussian(mode, device):
-        print("commit")
         _2pi_sqrt = 2.5066
         tanh = torch.tanh
         relu = F.relu
