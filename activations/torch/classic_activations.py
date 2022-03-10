@@ -1,5 +1,6 @@
 from .functions import ActivationModule
 import torch.nn.functional as F
+from torch import sin
 
 
 class ReLU(ActivationModule):
@@ -27,3 +28,8 @@ class GLU(ActivationModule):
     def __init__(self, device, dim=-1):
         function = F.glu
         super().__init__(function, device)
+
+class OneSin(ActivationModule):
+    def __init__(self, *args, **kwargs):
+        function = lambda x: (x+1>0).float() * (x-1<0).float() * sin(x*3.141592653589793)
+        super().__init__(function, *args, **kwargs)
