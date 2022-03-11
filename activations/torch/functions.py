@@ -15,7 +15,7 @@ _LINED = dict()
 
 
 def _save_input(self, input, output):
-    if self._selected_distribution is None: 
+    if self._selected_distribution is None:
         self.logger.critical("No distribution was assigned, cannot fill it")
         raise ValueError("Selected distribution is none")
     self._selected_distribution.fill_n(input[0])
@@ -23,7 +23,7 @@ def _save_input(self, input, output):
 
 def _save_input_auto_stop(self, input, output):
     self.inputs_saved += 1
-    if self._selected_distribution is None: 
+    if self._selected_distribution is None:
         self.logger.critical("No distribution was assigned, cannot fill it")
         raise ValueError("Selected distribution is none")
     self._selected_distribution.fill_n(input[0])
@@ -163,7 +163,7 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
     @classmethod
     def save_all_inputs(cls, *args, **kwargs):
         """
-        Saves inputs for all instantiates objects of the called class. 
+        Saves inputs for all instantiates objects of the called class.
         """
         instances_list = cls._get_instances()
         for instance in instances_list:
@@ -407,6 +407,10 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
 
     @classmethod
     def _get_instances(cls):
+        """
+        if called from ActivationModule: returning all instanciated functions
+        if called from a child-class: returning the instances of this specific class
+        """
         if "ActivationModule" in str(cls):
             instances_list = []
             [instances_list.extend(insts) for insts in cls.instances.values()]
