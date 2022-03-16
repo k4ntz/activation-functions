@@ -16,7 +16,6 @@ _LINED = dict()
 
 def _save_input(self, input, output):
     if self._selected_distribution is None:
-        self.logger.critical("No distribution was assigned, cannot fill it")
         raise ValueError("Selected distribution is none")
     self._selected_distribution.fill_n(input[0])
 
@@ -24,7 +23,6 @@ def _save_input(self, input, output):
 def _save_input_auto_stop(self, input, output):
     self.inputs_saved += 1
     if self._selected_distribution is None:
-        self.logger.critical("No distribution was assigned, cannot fill it")
         raise ValueError("Selected distribution is none")
     self._selected_distribution.fill_n(input[0])
     if self.inputs_saved > self._max_saves:
@@ -110,7 +108,7 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
                     Default ``0``
         """
         if not saving:
-            self.logger.warn("Not retrieving input anymore for showing")
+            #self.logger.warn("Not retrieving input anymore for showing")
             self._handle_retrieve_mode.remove()
             self._handle_retrieve_mode = None
             return
@@ -282,8 +280,8 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
                         fill = ax.fill_between(refined_bins, kde_curv, alpha=0.45,
                                                color=color, label=inp_label)
                     else:
-                        self.logger.warn("The bin size is too big, bins contain too few "
-                              "elements.\nbins:", x)
+                        self.logger.warn(f"The bin size is too big, bins contain too few "
+                              "elements.\nbins: {x}")
                         fill = ax.bar([], []) # in case of remove needed
                     size = x[1] - x[0]
                 else:
@@ -330,6 +328,7 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
         if x_min == np.inf or x_max == np.inf:
             torch.arange(-3, 3, 0.01)
         #TODO: when distribution is always empty, size wont be assigned and will throw an error
+
         return torch.arange(x_min, x_max, size)
 
     def plot_layer_distributions(self, ax):
@@ -354,8 +353,8 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
                         fill = ax.fill_between(refined_bins, kde_curv, alpha=0.4,
                                                 color=color, label=f"{inp_label} ({n})")
                     else:
-                        self.logger.warn("The bin size is too big, bins contain too few "
-                              "elements.\nbins:", x)
+                        self.logger.warn(f"The bin size is too big, bins contain too few "
+                              "elements.\nbins: {x}")
                         fill = ax.bar([], []) # in case of remove needed
                 else:
                     fill = ax.bar(x, weights/weights.max(), width=x[1] - x[0],
@@ -476,7 +475,7 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
                     If None, incrementing itself.
                     Default ``None``
         """
-        logger = ActivationLogger("f{cls.__name__}Logger")
+        logger = ActivationLogger(f"{cls.__name__}Logger")
         instances_list = cls._get_instances()
         if axes is None:
             if layout == "auto":

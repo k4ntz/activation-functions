@@ -7,6 +7,7 @@ import torch.nn as nn
 from activations.torch import ReLU
 from torch import optim
 import torch
+from activations.torch.utils.activation_utils import change_category, get_activations, _get_toplevel_functions, save_all_inputs, show_all
 
 
 class MnistCNN(nn.Module):
@@ -113,12 +114,21 @@ testLoader = DL(test_data, batch_size=64, shuffle=True)
 
 model = MnistCNN()
 
+top_lvl_functions = _get_toplevel_functions(model)
 num_epochs = 1
-
 # save and load if possible
-ReLU.save_all_inputs(category_name="train")
+save_all_inputs(top_lvl_functions)
+change_category(top_lvl_functions, "eval1")
+eval(model, trainLaoder)
+change_category(top_lvl_functions, "eval2")
+eval(model, trainLaoder)
+show_all(top_lvl_functions)
+save_all_inputs(top_lvl_functions, saving=False)
+
+
+""" ReLU.save_all_inputs(category_name="train")
 train(num_epochs, model, trainLaoder)
 ReLU.save_all_inputs(category_name="eval")
 eval(model, testLoader)
 ReLU.show_all()
-ReLU.save_all_inputs(saving=False)
+ReLU.save_all_inputs(saving=False) """
