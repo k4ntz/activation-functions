@@ -246,6 +246,14 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
                 from .utils.histograms_numpy import LayerHistogram as Histogram
             else:
                 from .utils.histograms_numpy import Histogram
+
+        #if the histogram is empty, it means that is was created at the same phase 
+        #that the current category is created, which means that no input was perceived 
+        #during this time -> redundant category
+        for i in range(len(self.distributions)):
+            if self.distributions[i]._empty:
+                del self.distributions[i]
+                del self.categories[i]
         self._selected_distribution = Histogram(self._inp_bin_width)
         self.distributions.append(self._selected_distribution)
         self.categories.append(value)
@@ -555,11 +563,11 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
     #             self.distributions = _distributions
     #     super().load_state_dict(state_dict)
     #
-    # def state_dict(self, destination=None, *args, **kwargs):
-    #     _state_dict = super().state_dict(destination, *args, **kwargs)
-    #     if self.distributions is not None:
-    #         _state_dict["distributions"] = self.distributions
-    #     return _state_dict
+    def state_dict(self, destination=None, *args, **kwargs):
+        _state_dict = super().state_dict(destination, *args, **kwargs)
+        if self.distributions is not None:
+            _state_dict["distributions"] = self.distributions
+        return _state_dict
 
 
 
