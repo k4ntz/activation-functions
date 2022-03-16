@@ -13,6 +13,29 @@ class GroupedActivations:
         self.functions = functions
         self.logger = ActivationLogger(name)
 
+    def _check_ActivationModule(self, object):
+        if not isinstance(object, ActivationModule):
+            raise TypeError(f"Activation Function {af} must be a ActivationModule Activation function")
+
+    def add_func(self, af):
+        self._check_ActivationModule(af)
+        self.functions.append(af)
+
+    def delete_func(self, objType):
+        self._check_ActivationModule(objType)
+        n = 0
+        for func in self.functions: 
+            if type(objType) is type(func):
+                self.functions.remove(func)
+                n += 1
+        self.logger.info(f"Deleted {n} ActivationModule functions")
+
+    def state_dicts(self, *args, **kwargs):
+        state_dicts = []
+        for func in self.functions:
+            state_dicts.append(func.state_dict(*args, **kwargs))
+        return state_dicts
+
     def show_all(self, x=None, fitted_function=True, other_func=None,
                  display=True, tolerance=0.001, title=None, axes=None,
                  layout="auto", writer=None, step=None, colors="#1f77b4"):
