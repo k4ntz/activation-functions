@@ -7,7 +7,7 @@ import torch.nn as nn
 from activations.torch import ReLU
 from torch import optim
 import torch
-from activations.torch.utils.activation_utils import change_category, get_activations, _get_toplevel_functions, save_all_inputs, show_all
+from activations.torch.utils.activation_utils import  _get_toplevel_functions, GroupedActivations
 
 
 class MnistCNN(nn.Module):
@@ -115,15 +115,17 @@ testLoader = DL(test_data, batch_size=64, shuffle=True)
 model = MnistCNN()
 
 top_lvl_functions = _get_toplevel_functions(model)
+networkGrouped = GroupedActivations(top_lvl_functions, "MnistCNN")
+
 num_epochs = 1
 # save and load if possible
-save_all_inputs(top_lvl_functions)
-change_category(top_lvl_functions, "eval1")
+networkGrouped.save_all_inputs()
+networkGrouped.change_category("eval1")
+train(1, model, trainLaoder)
+networkGrouped.change_category("eval2")
 eval(model, trainLaoder)
-change_category(top_lvl_functions, "eval2")
-eval(model, trainLaoder)
-show_all(top_lvl_functions)
-save_all_inputs(top_lvl_functions, saving=False)
+networkGrouped.show_all()
+networkGrouped.save_all_inputs(saving=False)
 
 
 """ ReLU.save_all_inputs(category_name="train")

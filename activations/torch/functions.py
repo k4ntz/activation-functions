@@ -9,10 +9,16 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
 from termcolor import colored
+from random import randint
 
 
 _LINED = dict()
 
+def create_colors(n):
+    colors = []
+    for i in range(n):
+        colors.append('#%06X' % randint(0, 0xFFFFFF))
+    return colors
 
 def _save_input(self, input, output):
     if self._selected_distribution is None:
@@ -258,10 +264,11 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
             scipy_imported = False
         dists_fb = []
         x_min, x_max = np.inf, -np.inf
-        if colors is None:
-            colors = self.histograms_colors
-        elif not(isinstance(colors, list) or isinstance(colors, tuple)):
-            colors = [colors] * len(self.distributions)
+        #TODO: this is obsolete afaik
+        """ if colors is None:
+            colors = self.histograms_colors """
+        if not(isinstance(colors, list) or isinstance(colors, tuple)):
+            colors = create_colors(len(self.distributions))
         for i, (distribution, inp_label, color) in enumerate(zip(self.distributions, self.categories, colors)):
             if distribution.is_empty:
                 if self.distribution_display_mode == "kde" and scipy_imported:
