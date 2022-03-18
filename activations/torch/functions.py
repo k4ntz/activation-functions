@@ -9,14 +9,19 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
 from termcolor import colored
+from random import randint
 
 
 _LINED = dict()
 
+def create_colors(n):
+    colors = []
+    for i in range(n):
+        colors.append('#%06X' % randint(0, 0xFFFFFF))
+    return colors
 
 def _save_inputs(self, input, output):
     if self._selected_distribution is None:
-        self.logger.critical("No distribution was assigned, cannot fill it")
         raise ValueError("Selected distribution is none")
     self._selected_distribution.fill_n(input[0])
 
@@ -29,7 +34,6 @@ def _save_gradients(self, in_grad, out_grad):
 def _save_inputs_auto_stop(self, input, output):
     self.inputs_saved += 1
     if self._selected_distribution is None:
-        self.logger.critical("No distribution was assigned, cannot fill it")
         raise ValueError("Selected distribution is none")
     self._selected_distribution.fill_n(input[0])
     if self.inputs_saved > self._max_saves:
@@ -454,6 +458,13 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
                 from activations.torch.utils.histograms_numpy import NeuronsHistogram as Histogram
             else:
                 from activations.torch.utils.histograms_numpy import Histogram
+        #if the histogram is empty, it means that is was created at the same phase
+        #that the current category is created, which means that no input was perceived
+        #during this time -> redundant category
+        for i in range(len(self.distributions)):
+            if self.distributions[i]._empty:
+                del self.distributions[i]
+                del self.categories[i]
         self._selected_distribution = Histogram(self._inp_bin_width)
         self.distributions.append(self._selected_distribution)
         self.categories.append(value)
@@ -472,10 +483,11 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
             scipy_imported = False
         dists_fb = []
         x_min, x_max = np.inf, -np.inf
-        if colors is None:
-            colors = self.histograms_colors
-        elif not(isinstance(colors, list) or isinstance(colors, tuple)):
-            colors = [colors] * len(self.distributions)
+        #TODO: this is obsolete afaik
+        """ if colors is None:
+            colors = self.histograms_colors """
+        if not(isinstance(colors, list) or isinstance(colors, tuple)):
+            colors = create_colors(len(self.distributions))
         for i, (distribution, inp_label, color) in enumerate(zip(self.distributions, self.categories, colors)):
             if distribution.is_empty:
                 if self.distribution_display_mode == "kde" and scipy_imported:
@@ -494,8 +506,8 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
                         fill = ax.fill_between(refined_bins, kde_curv, alpha=0.45,
                                                color=color, label=inp_label)
                     else:
-                        self.logger.warn("The bin size is too big, bins contain too few "
-                              "elements.\nbins:", x)
+                        self.logger.warn(f"The bin size is too big, bins contain too few "
+                              "elements.\nbins: {x}")
                         fill = ax.bar([], []) # in case of remove needed
                     size = x[1] - x[0]
                 else:
@@ -542,6 +554,7 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
         if x_min == np.inf or x_max == np.inf:
             torch.arange(-3, 3, 0.01)
         #TODO: when distribution is always empty, size wont be assigned and will throw an error
+
         return torch.arange(x_min, x_max, size)
 
     def plot_layer_distributions(self, ax):
@@ -566,8 +579,8 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
                         fill = ax.fill_between(refined_bins, kde_curv, alpha=0.4,
                                                 color=color, label=f"{inp_label} ({n})")
                     else:
-                        self.logger.warn("The bin size is too big, bins contain too few "
-                              "elements.\nbins:", x)
+                        self.logger.warn(f"The bin size is too big, bins contain too few "
+                              "elements.\nbins: {x}")
                         fill = ax.bar([], []) # in case of remove needed
                 else:
                     fill = ax.bar(x, weights/weights.max(), width=x[1] - x[0],
@@ -688,7 +701,7 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
                     If None, incrementing itself.
                     Default ``None``
         """
-        logger = ActivationLogger("f{cls.__name__}Logger")
+        logger = ActivationLogger(f"{cls.__name__}Logger")
         instances_list = cls._get_instances()
         if axes is None:
             if layout == "auto":
@@ -761,11 +774,11 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
     #             self.distributions = _distributions
     #     super().load_state_dict(state_dict)
     #
-    # def state_dict(self, destination=None, *args, **kwargs):
-    #     _state_dict = super().state_dict(destination, *args, **kwargs)
-    #     if self.distributions is not None:
-    #         _state_dict["distributions"] = self.distributions
-    #     return _state_dict
+    def state_dict(self, destination=None, *args, **kwargs):
+        _state_dict = super().state_dict(destination, *args, **kwargs)
+        if self.distributions is not None:
+            _state_dict["distributions"] = self.distributions
+        return _state_dict
 
 
 
