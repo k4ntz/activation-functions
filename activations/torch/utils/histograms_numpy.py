@@ -9,7 +9,7 @@ class Histogram():
     def __init__(self, bin_size="auto", random_select=False):
         self.bins = np.array([])
         self.weights = np.array([], dtype=np.uint32)
-        self._empty = True
+        self._is_empty = True
         self._verbose = False
         if bin_size == "auto":
             self._auto_bin_size = True
@@ -39,7 +39,7 @@ class Histogram():
                                    self._bin_size)
             weights, bins = np.histogram(new_input, bins_array)
         self.weights, self.bins = weights, bins[:-1]
-        self._empty = False
+        self._is_empty = False
         self._fill_iplm = self._update_hist
 
     def _update_hist(self, new_input):
@@ -57,7 +57,7 @@ class Histogram():
             rtrn = "Empty Histogram"
         else:
             rtrn = f"Histogram on range {self.bins[0]}, {self.bins[-1]}, of " + \
-                   f"bin_size {self._bin_size}, with {self.weights.sum()} total" + \
+                   f"bin_size {self._bin_size}, with {self.weights.sum()}" + \
                    f"elements"
         if self._verbose:
             rtrn += f" {hex(id(self))}"
@@ -69,9 +69,9 @@ class Histogram():
 
     @property
     def is_empty(self):
-        if self._empty is True and len(self.bins) > 0:
-            self._empty = False
-        return self._empty
+        if self._is_empty is True and len(self.bins) > 0:
+            self._is_empty = False
+        return self._is_empty
 
     def normalize(self, numpy=True, nb_output=100):
         """
@@ -123,12 +123,12 @@ class Histogram():
 
 
 
-class LayerHistogram():
+class NeuronsHistogram():
     """
     Input Histograms, used to retrieve the input of Rational Activations
     """
     def __init__(self, bin_size="auto", random_select=False, nb_neurons="auto"):
-        self._empty = True
+        self._is_empty = True
         self._verbose = False
         self.nb_neurons = nb_neurons
         if nb_neurons != "auto":
@@ -174,7 +174,7 @@ class LayerHistogram():
                                    self._bin_size)
             weights, bins = np.histogram(neur_inp, bins_array)
             self.__weights[n], self.__bins[n] = weights, bins[:-1]
-        self._empty = False
+        self._is_empty = False
         self._fill_iplm = self._update_hist
 
     def _update_hist(self, new_input):
@@ -220,9 +220,9 @@ class LayerHistogram():
 
     @property
     def is_empty(self):
-        if self._empty is True and len(self.__bins[0]) > 0:
-            self._empty = False
-        return self._empty
+        if self._is_empty is True and len(self.__bins[0]) > 0:
+            self._is_empty = False
+        return self._is_empty
 
     @property
     def total(self):

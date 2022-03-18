@@ -82,7 +82,6 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
 #end
 }
     """)
-
     content = file_content.merge(locals())
 
     with open(fname, "w") as text_file:

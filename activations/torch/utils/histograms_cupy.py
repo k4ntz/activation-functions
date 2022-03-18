@@ -13,12 +13,13 @@ class Histogram():
     def __init__(self, bin_size="auto", random_select=False):
         self.bins = cp.array([])
         self.weights = cp.array([], dtype=cp.uint32)
-        self._empty = True
+        self._is_empty = True
         self._verbose = False
         if bin_size == "auto":
             self._auto_bin_size = True
             self.bin_size = 0.0001
             self._rd = 4
+            self._fill_iplm = self._first_time_fill
         else:
             self._auto_bin_size = False
             self.bin_size = float(bin_size)
@@ -47,7 +48,7 @@ class Histogram():
                                    self.bin_size)
             weights, bins = cp.histogram(new_input, bins_array)
         self.weights, self.bins = weights, bins[:-1]
-        self._empty = False
+        self._is_empty = False
         self._fill_iplm = self._update_hist
 
     def _update_hist(self, new_input):
@@ -65,11 +66,20 @@ class Histogram():
             rtrn = "Empty Histogram"
         else:
             rtrn = f"Histogram on range {self.bins[0]}, {self.bins[-1]}, of " + \
-                   f"bin_size {self.bin_size}, with {self.weights.sum()} total" + \
+                   f"bin_size {self.bin_size}, with {self.weights.sum()}" + \
                    f"elements"
         if self._verbose:
             rtrn += f" {hex(id(self))}"
         return rtrn
+
+    def empty(self):
+        """
+        empties the histogram
+        """
+        self._is_empty = True
+        self.bins = cp.array([])
+        self.weights = cp.array([], dtype=cp.uint32)
+        self._fill_iplm = self._first_time_fill
 
     @property
     def bins(self):
@@ -84,9 +94,9 @@ class Histogram():
 
     @property
     def is_empty(self):
-        if self._empty is True and len(self.bins) > 0:
-            self._empty = False
-        return self._empty
+        if self._is_empty is True and len(self.bins) > 0:
+            self._is_empty = False
+        return self._is_empty
 
     @property
     def total(self):
@@ -121,12 +131,13 @@ class Histogram():
         x_max = float(self.__bins[-1])
         return np.arange(x_min, x_max, self.bin_size/100)
 
-class LayerHistogram():
+
+class NeuronsHistogram():
     """
     Input Histograms, used to retrieve the input of Rational Activations
     """
     def __init__(self, bin_size="auto", random_select=False, nb_neurons="auto"):
-        self._empty = True
+        self._is_empty = True
         self._verbose = False
         self.nb_neurons = nb_neurons
         if nb_neurons != "auto":
@@ -172,7 +183,7 @@ class LayerHistogram():
                                    self.bin_size)
             weights, bins = cp.histogram(neur_inp, bins_array)
             self.__weights[n], self.__bins[n] = weights, bins[:-1]
-        self._empty = False
+        self._is_empty = False
         self._fill_iplm = self._update_hist
 
     def _update_hist(self, new_input):
@@ -208,6 +219,13 @@ class LayerHistogram():
     def bins(self):
         return [b.get().flatten() for b in self.__bins]
 
+    def empty(self):
+        """
+        empties the histogram
+        """
+        self._fill_iplm = self._first_time_fill
+        self._is_empty = True
+
     # @bins.setter
     # def bins(self, var):
     #     if isinstance(var, np.ndarray):
@@ -221,9 +239,9 @@ class LayerHistogram():
 
     @property
     def is_empty(self):
-        if self._empty is True and len(self.__bins[0]) > 0:
-            self._empty = False
-        return self._empty
+        if self._is_empty is True and len(self.__bins[0]) > 0:
+            self._is_empty = False
+        return self._is_empty
 
     @property
     def total(self):

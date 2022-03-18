@@ -14,14 +14,19 @@ from termcolor import colored
 _LINED = dict()
 
 
-def _save_input(self, input, output):
+def _save_inputs(self, input, output):
     if self._selected_distribution is None:
         self.logger.critical("No distribution was assigned, cannot fill it")
         raise ValueError("Selected distribution is none")
     self._selected_distribution.fill_n(input[0])
 
 
-def _save_input_auto_stop(self, input, output):
+def _save_gradients(self, in_grad, out_grad):
+    self._in_grad_dist.fill_n(in_grad[0])
+    self._out_grad_dist.fill_n(out_grad[0])
+
+
+def _save_inputs_auto_stop(self, input, output):
     self.inputs_saved += 1
     if self._selected_distribution is None:
         self.logger.critical("No distribution was assigned, cannot fill it")
@@ -63,7 +68,8 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
                 self.forward = self.activation_function.__forward__
             else:
                 self.forward = self.activation_function
-        self._handle_retrieve_mode = None
+        self._handle_inputs = None
+        self._handle_grads = None
         self._saving_input = False
         self.distributions = []
         if device is None:
@@ -105,28 +111,27 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
                     Have to be one of ``all``, ``categories``, ...
                     Default ``all``
                 category_name (str):
-                    The mode for the input retrieve.\n
-                    Have to be one of ``all``, ``categories``, ...
+                    The name of the category
                     Default ``0``
         """
         if not saving:
-            self.logger.warn("Not retrieving input anymore for showing")
-            self._handle_retrieve_mode.remove()
-            self._handle_retrieve_mode = None
+            self.logger.warn("Not retrieving input anymore")
+            self._handle_inputs.remove()
+            self._handle_inputs = None
             return
-        if self._handle_retrieve_mode is not None:
+        if self._handle_inputs is not None:
             # print("Already in retrieve mode")
             return
         if "cuda" in self.device:
-            if "layer" in mode.lower():
-                from .utils.histograms_cupy import LayerHistogram as Histogram
+            if "neurons" in mode.lower():
+                from activations.torch.utils.histograms_cupy import NeuronsHistogram as Histogram
             else:
-                from .utils.histograms_cupy import Histogram
+                from activations.torch.utils.histograms_cupy import Histogram
         else:
-            if "layer" in mode.lower():
-                from .utils.histograms_numpy import LayerHistogram as Histogram
+            if "neurons" in mode.lower():
+                from activations.torch.utils.histograms_numpy import NeuronsHistogram as Histogram
             else:
-                from .utils.histograms_numpy import Histogram
+                from activations.torch.utils.histograms_numpy import Histogram
         if "categor" in mode.lower():
             if category_name is None:
                 self._selected_distribution_name = None
@@ -147,18 +152,72 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
         self._inp_bin_width = bin_width
         if auto_stop:
             self.inputs_saved = 0
-            self._handle_retrieve_mode = self.register_forward_hook(_save_input_auto_stop)
+            self._handle_inputs = self.register_forward_hook(_save_inputs_auto_stop)
             self._max_saves = max_saves
         else:
-            self._handle_retrieve_mode = self.register_forward_hook(_save_input)
+            self._handle_inputs = self.register_forward_hook(_save_inputs)
+
+    def save_gradients(self, saving=True, auto_stop=False, max_saves=1000,
+                       bin_width="auto", mode="all"):
+        """
+        Will retrieve the distribution of the input in self.distribution. \n
+        This will slow down the function, as it has to retrieve the input \
+        dist.\n
+
+        Arguments:
+                auto_stop (bool):
+                    If True, the retrieving will stop after `max_saves` \
+                    calls to forward.\n
+                    Else, use :meth:`torch.Rational.training_mode`.\n
+                    Default ``False``
+                max_saves (int):
+                    The range on which the curves of the functions are fitted \
+                    together.\n
+                    Default ``1000``
+                bin_width (float):
+                    Default bin width for the histogram.\n
+                    Default ``0.1``
+                mode (str):
+                    The mode for the input retrieve.\n
+                    Have to be one of ``all``, ``categories``, ...
+                    Default ``all``
+                category_name (str):
+                    The mode for the input retrieve.\n
+                    Have to be one of ``all``, ``categories``, ...
+                    Default ``0``
+        """
+        if not saving:
+            self.logger.warn("Not retrieving gradients anymore")
+            self._handle_grads.remove()
+            self._handle_grads = None
+            return
+        if self._handle_grads is not None:
+            # print("Already in retrieve mode")
+            return
+        if "cuda" in self.device:
+            from .utils.histograms_cupy import Histogram
+        else:
+            from .utils.histograms_numpy import Histogram
+
+        self._grm = mode  # gradient retrieval mode
+        self._in_grad_dist = Histogram(bin_width)
+        self._out_grad_dist = Histogram(bin_width)
+        self._grad_bin_width = bin_width
+        if auto_stop:
+            self.inputs_saved = 0
+            raise NotImplementedError
+            # self._handle_grads = self.register_full_backward_hook(_save_gradients_auto_stop)
+            self._max_saves = max_saves
+        else:
+            self._handle_grads = self.register_full_backward_hook(_save_gradients)
 
     # def training_mode(self):
     #     """
     #     Stops retrieving the distribution of the input in `self.distribution`.
     #     """
     #     print("Training mode, no longer retrieving the input.")
-    #     self._handle_retrieve_mode.remove()
-    #     self._handle_retrieve_mode = None
+    #     self._handle_inputs.remove()
+    #     self._handle_inputs = None
 
     @classmethod
     def save_all_inputs(cls, *args, **kwargs):
@@ -168,6 +227,15 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
         instances_list = cls._get_instances()
         for instance in instances_list:
             instance.save_inputs(*args, **kwargs)
+
+    @classmethod
+    def save_all_gradients(cls, *args, **kwargs):
+        """
+        Saves gradients for all instantiates objects of the called class.
+        """
+        instances_list = cls._get_instances()
+        for instance in instances_list:
+            instance.save_gradients(*args, **kwargs)
 
     def __repr__(self):
         return f"{self.classname}"
@@ -179,6 +247,150 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
         #     return f"{self.activation_function.__name__} ActivationModule"
         # return f"{self.activation_function} ActivationModule"
 
+    def show_gradients(self, display=True, tolerance=0.001, title=None,
+                       axis=None, writer=None, step=None, label=None, colors=None):
+        try:
+            import scipy.stats as sts
+            scipy_imported = True
+        except ImportError:
+            RationalImportScipyWarning.warn()
+            scipy_imported = False
+        if axis is None:
+            with sns.axes_style("whitegrid"):
+                # fig, axis = plt.subplots(1, 1, figsize=(8, 6))
+                fig, axis = plt.subplots(1, 1, figsize=(20, 12))
+        if colors is None or len(colors) != 2:
+            colors = ["orange", "blue"]
+        dists = [self._in_grad_dist, self._out_grad_dist]
+        if label is None:
+            labels = ['input grads', 'output grads']
+        else:
+            labels = [f'{label} (inp)', f'{label} (outp)']
+        for distribution, col, label in zip(dists, colors, labels):
+            weights, x = distribution.weights, distribution.bins
+            if self.use_kde and scipy_imported:
+                if len(x) > 5:
+                    refined_bins = np.linspace(float(x[0]), float(x[-1]), 200)
+                    kde_curv = distribution.kde()(refined_bins)
+                    # ax.plot(refined_bins, kde_curv, lw=0.1)
+                    axis.fill_between(refined_bins, kde_curv, alpha=0.4,
+                                      color=col, label=label)
+                else:
+                    self.logger.warn("The bin size is too big, bins contain too few "
+                                     f"elements.\nbins: {x}")
+                    axis.bar([], []) # in case of remove needed
+            else:
+                axis.bar(x, weights/weights.max(), width=x[1] - x[0],
+                         linewidth=0, alpha=0.4, color=col, label=label)
+            distribution.empty()
+        if writer is not None:
+            try:
+                writer.add_figure(title, fig, step)
+            except AttributeError:
+                self.logger.error("Could not use the given SummaryWriter to add the Rational figure")
+        elif display:
+            plt.legend()
+            plt.show()
+        else:
+            if axis is None:
+                return fig
+
+    @classmethod
+    def show_all_gradients(cls, display=True, tolerance=0.001, title=None,
+                           axes=None, layout="auto", writer=None, step=None,
+                           colors=None):
+        """
+        Shows a graph of the all instanciated activation functions (or returns \
+        it if ``returns=True``).
+
+        Arguments:
+                x (range):
+                    The range to print the function on.\n
+                    Default ``None``
+                fitted_function (bool):
+                    If ``True``, displays the best fitted function if searched.
+                    Otherwise, returns it. \n
+                    Default ``True``
+                other_funcs (callable):
+                    another function to be plotted or a list of other callable
+                    functions or a dictionary with the function name as key
+                    and the callable as value.
+                display (bool):
+                    If ``True``, displays the plot.
+                    Otherwise, returns the figure. \n
+                    Default ``False``
+                tolerance (float):
+                    If the input histogram is used, it will be pruned. \n
+                    Every bin containg less than `tolerance` of the total \
+                    input is pruned out.
+                    (Reduces noise).
+                    Default ``0.001``
+                title (str):
+                    If not None, a title for the figure
+                    Default ``None``
+                axes (matplotlib.pyplot.axis):
+                    On ax or a list of axes to be plotted on. \n
+                    If None, creates them automatically (see `layout`). \n
+                    Default ``None``
+                layout (tuple or 'auto'):
+                    Grid layout of the figure. If "auto", one is generated.\n
+                    Default ``"auto"``
+                writer (tensorboardX.SummaryWriter):
+                    A tensorboardX writer to give the image to, in case of
+                    debugging.
+                    Default ``None``
+                step (int):
+                    A step/epoch for tensorboardX writer.
+                    If None, incrementing itself.
+                    Default ``None``
+        """
+        logger = ActivationLogger("f{cls.__name__}Logger")
+        instances_list = cls._get_instances()
+        if axes is None:
+            if layout == "auto":
+                total = len(instances_list)
+                layout = _get_auto_axis_layout(total)
+            if len(layout) != 2:
+                msg = 'layout should be either "auto" or a tuple of size 2'
+                raise TypeError(msg)
+            figs = tuple(np.flip(np.array(layout)* (2, 3)))
+            try:
+                import seaborn as sns
+                with sns.axes_style("whitegrid"):
+                    fig, axes = plt.subplots(*layout, figsize=figs)
+            except ImportError:
+                logger.warn("Could not import seaborn")
+                #RationalImportSeabornWarning.warn()
+                fig, axes = plt.subplots(*layout, figsize=figs)
+            if isinstance(axes, plt.Axes):
+                axes = np.array([axes])
+            # if display:
+            for ax in axes.flatten()[len(instances_list):]:
+                ax.remove()
+            axes = axes[:len(instances_list)]
+        elif isinstance(axes, plt.Axes):
+            axes = np.array([axes for _ in range(len(instances_list))])
+            fig = plt.gcf()
+        if isinstance(colors, str) or colors is None:
+            colors = [colors]*len(axes.flatten())
+        for act, ax, color in zip(instances_list, axes.flatten(), colors):
+            act.show_gradients(False, tolerance, title, axis=ax,
+                               writer=None, step=step, colors=color)
+        if title is not None:
+            fig.suptitle(title, y=0.95)
+        fig = plt.gcf()
+        fig.tight_layout()
+        if writer is not None:
+            if step is None:
+                step = cls._step
+                cls._step += 1
+            writer.add_figure(title, fig, step)
+        elif display:
+            plt.legend()
+            plt.show()
+        else:
+            return fig
+
     def show(self, x=None, fitted_function=True, other_func=None, display=True,
              tolerance=0.001, title=None, axis=None, writer=None, step=None, label=None,
              color=None):
@@ -189,14 +401,14 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
             x = torch.arange(*x).float()
         elif isinstance(x, torch.Tensor) or isinstance(x, np.ndarray):
             x = torch.tensor(x.float())
-        with sns.axes_style("whitegrid"):
-            if axis is None:
+        if axis is None:
+            with sns.axes_style("whitegrid"):
                 # fig, axis = plt.subplots(1, 1, figsize=(8, 6))
                 fig, axis = plt.subplots(1, 1, figsize=(20, 12))
         if self.distributions:
             if self.distribution_display_mode in ["kde", "bar"]:
                 ax2 = axis.twinx()
-                if "layer" in self._irm:
+                if "neurons" in self._irm:
                     x = self.plot_layer_distributions(ax2)
                 else:
                     x = self.plot_distributions(ax2, color)
@@ -233,15 +445,15 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
         if value == self._selected_distribution_name:
             return
         if "cuda" in self.device:
-            if "layer" in self._irm.lower():
-                from .utils.histograms_cupy import LayerHistogram as Histogram
+            if "neurons" in self._irm.lower():
+                from activations.torch.utils.histograms_cupy import NeuronsHistogram as Histogram
             else:
-                from .utils.histograms_cupy import Histogram
+                from activations.torch.utils.histograms_cupy import Histogram
         else:
-            if "layer" in self._irm.lower():
-                from .utils.histograms_numpy import LayerHistogram as Histogram
+            if "neurons" in self._irm.lower():
+                from activations.torch.utils.histograms_numpy import NeuronsHistogram as Histogram
             else:
-                from .utils.histograms_numpy import Histogram
+                from activations.torch.utils.histograms_numpy import Histogram
         self._selected_distribution = Histogram(self._inp_bin_width)
         self.distributions.append(self._selected_distribution)
         self.categories.append(value)
@@ -506,13 +718,13 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
         if isinstance(colors, str):
             colors = [colors]*len(axes.flatten())
         if isinstance(x, list):
-            for rat, ax, x_rat, color in zip(instances_list, axes.flatten(), x, colors):
-                rat.show(x_rat, fitted_function, other_func, False, tolerance,
+            for act, ax, x_act, color in zip(instances_list, axes.flatten(), x, colors):
+                act.show(x_act, fitted_function, other_func, False, tolerance,
                          title, axis=ax, writer=None, step=step,
                          color=color)
         else:
-            for rat, ax, color in zip(instances_list, axes.flatten(), colors):
-                rat.show(x, fitted_function, other_func, False, tolerance,
+            for act, ax, color in zip(instances_list, axes.flatten(), colors):
+                act.show(x, fitted_function, other_func, False, tolerance,
                          title, axis=ax, writer=None, step=step,
                          color=color)
         if title is not None:
@@ -563,15 +775,19 @@ if __name__ == '__main__':
         tanh = torch.tanh
         relu = F.relu
 
+        nb_neurons_in_layer = 5
+
         leaky_relu = F.leaky_relu
         gaussian = lambda x: torch.exp(-0.5*x**2) / _2pi_sqrt
         gaussian.__name__ = "gaussian"
         gau = ActivationModule(gaussian, device=device)
-        gau.input_retrieve_mode(mode=mode, category_name="neg") # Wrong
+        gau.save_inputs(mode=mode, category_name="neg") # Wrong
+        inp = torch.stack([(torch.rand(10000)-(i+1))*2 for i in range(nb_neurons_in_layer)], 1)
+        print(inp.shape)
         gau(inp.to(device))
         if "categories" in mode:
             gau.current_inp_category = "pos"
-            inp = torch.stack([(torch.rand(10000)+(i+1))*2 for i in range(5)], 1)
+            inp = torch.stack([(torch.rand(10000)+(i+1))*2 for i in range(nb_neurons_in_layer)], 1)
             gau(inp.to(device))
             # gau(inp.cuda())
         gau.show()
@@ -579,5 +795,5 @@ if __name__ == '__main__':
     ActivationModule.distribution_display_mode = "bar"
     # for device in ["cuda:0", "cpu"]:
     for device in ["cpu"]:
-        for mode in ["categories", "layer", "layer_categories"]:
+        for mode in ["categories", "neurons", "neurons_categories"]:
             plot_gaussian(mode, device)

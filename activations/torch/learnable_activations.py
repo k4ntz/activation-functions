@@ -28,10 +28,10 @@ class TentActivation(ActivationModule):
         """
         super().__init__("tent")
         if torch.is_tensor(delta):
-            self.delta = nn.Parameter(delta)
+            self.delta = nn.Parameter(delta, requires_grad=learnable)
         else:
-            self.delta = nn.Parameter(torch.tensor(delta))
-        self.delta.requires_grad = learnable
+            self.delta = nn.Parameter(torch.tensor(delta), requires_grad=learnable)
+        # self.delta.requires_grad = learnable
         self.lb = lb
         self.ub = ub
         self.learnable = learnable
