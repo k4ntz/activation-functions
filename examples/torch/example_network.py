@@ -4,10 +4,9 @@ from torchvision.transforms import ToTensor
 from torch.utils.data import DataLoader as DL
 import torch.nn as nn
 # import torch.functional as F
-from activations.torch import ReLU
+from activations.torch import ReLU, LReLU
 from torch import optim
 import torch
-from activations.torch.utils.activation_utils import  _get_toplevel_functions, GroupedActivations
 
 
 class MnistCNN(nn.Module):
@@ -114,18 +113,8 @@ testLoader = DL(test_data, batch_size=64, shuffle=True)
 
 model = MnistCNN()
 
-top_lvl_functions = _get_toplevel_functions(model)
-networkGrouped = GroupedActivations(top_lvl_functions, "MnistCNN")
-
 num_epochs = 1
-# save and load if possible
-networkGrouped.save_all_inputs()
-networkGrouped.change_category("eval1")
-train(1, model, trainLaoder)
-networkGrouped.change_category("eval2")
-eval(model, trainLaoder)
-networkGrouped.show_all()
-networkGrouped.save_all_inputs(saving=False)
+LReLU.show_all(model)
 
 
 """ ReLU.save_all_inputs(category_name="train")

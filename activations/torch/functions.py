@@ -1,6 +1,5 @@
 import torch
 import torch.nn.functional as F
-from activations.utils.find_init_weights import find_weights
 from activations.utils.utils import _get_auto_axis_layout, _cleared_arrays
 from activations.utils.warnings import RationalImportScipyWarning
 from activations.utils.activation_logger import ActivationLogger
@@ -11,8 +10,73 @@ import numpy as np
 from termcolor import colored
 from random import randint
 
-
 _LINED = dict()
+
+def get_toplevel_functions(network):
+        dict_afs = _get_activations(network)
+        functions = []
+        all_keys = []
+        for key in dict_afs:
+            if "." not in key:
+                all_keys.append(key)
+        for top_key in all_keys:
+            curr_obj = dict_afs[top_key]
+            if type(curr_obj) is not list:
+                functions.append(curr_obj)
+            else:
+                functions.extend(curr_obj)
+        return functions
+
+# TODO: there should be a way of isinstance(object, Container) instead,
+#       but I couldn't find it.
+def is_hierarchical(object):
+    container_list = [torch.nn.modules.container.ModuleDict,
+                    torch.nn.modules.container.ModuleList,
+                    torch.nn.modules.container.Sequential,
+                    torch.nn.modules.container.ParameterDict,
+                    torch.nn.modules.container.ParameterList]
+
+    for class_type in container_list:
+        if isinstance(object, class_type):
+            return True
+    return False
+
+
+def _get_activations(network):
+    """
+    Retrieves a dictionary of all ActivationModule AFs present in the network
+
+    Arguments: 
+        network (torch.nn.Module):
+            The network from which to retrieve all the ActivationModule AFs
+    Returns:
+        af_dict (dictionary):
+            A dictionary containing as keys the names of the layer
+            and as value a list of all AFs contained in the specific layer / object.\n 
+            Duplicates will be in the dictionary, as hierarchical AFs are contained 
+            in both the top-level hierarchy and lower-level hierarchies
+    """
+    found_instances = {}
+    for name, object in network.named_children():
+        if isinstance(object, ActivationModule):
+            found_instances[name] = object
+        elif (object):
+            found_instances[name] = _process_recursive(
+                found_instances, name, object)
+    return found_instances
+
+
+def _process_recursive(original_dict, recName, recObject):
+    af_list = []
+    for name, object in recObject.named_children():
+        if isinstance(object, ActivationModule):
+            af_list.append(object)
+        elif is_hierarchical(object):
+            wholeName = recName + "." + name
+            original_dict[wholeName] = _process_recursive(
+                original_dict, name, object)
+            af_list.extend(original_dict[wholeName])
+    return af_list
 
 def create_colors(n):
     colors = []
@@ -56,6 +120,7 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
     instances = {}
     histograms_colors = ["red", "green", "black"]
     distribution_display_mode = "kde"
+    logger = ActivationLogger("Generic ActivationModule Logger")
 
     def __init__(self, function, device=None):
         if isinstance(function, str):
@@ -224,20 +289,28 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
     #     self._handle_inputs = None
 
     @classmethod
-    def save_all_inputs(cls, *args, **kwargs):
+    def save_all_inputs(cls, input_fcts = None, *args, **kwargs):
+        """Saves input that the Activation Functions perceive when data flows through them.
+
+        Args:
+            input_fcts ((Union(List, Dict, torch.nn.Module))): 
+                The Activation Functions for which the inputs shall be saved. Default ``None``, in 
+                which case the inputs are saved for the calling class. 
         """
-        Saves inputs for all instantiates objects of the called class.
-        """
-        instances_list = cls._get_instances()
+        instances_list = cls.get_instance_list(input_fcts)
         for instance in instances_list:
             instance.save_inputs(*args, **kwargs)
 
     @classmethod
-    def save_all_gradients(cls, *args, **kwargs):
+    def save_all_gradients(cls, input_fcts = None, *args, **kwargs):
         """
         Saves gradients for all instantiates objects of the called class.
+        Args:
+            input_fcts ((Union(List, Dict, torch.nn.Module))): 
+                The Activation Functions for which the gradients shall be saved. Default ``None``, in 
+                which case the gradients are saved for the calling class. 
         """
-        instances_list = cls._get_instances()
+        instances_list = cls.get_instance_list(input_fcts)
         for instance in instances_list:
             instance.save_gradients(*args, **kwargs)
 
@@ -300,7 +373,7 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
                 return fig
 
     @classmethod
-    def show_all_gradients(cls, display=True, tolerance=0.001, title=None,
+    def show_all_gradients(cls, input_fcts = None, display=True, tolerance=0.001, title=None,
                            axes=None, layout="auto", writer=None, step=None,
                            colors=None):
         """
@@ -308,6 +381,10 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
         it if ``returns=True``).
 
         Arguments:
+                input_fcts (Union(List, Dict, torch.nn.Module)):
+                    The input ActivationFunctions from which the gradients are to be visualized.
+                    Default ``None``, in that case the instances of the calling
+                    class are used for visualization.
                 x (range):
                     The range to print the function on.\n
                     Default ``None``
@@ -349,7 +426,7 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
                     Default ``None``
         """
         logger = ActivationLogger("f{cls.__name__}Logger")
-        instances_list = cls._get_instances()
+        instances_list = cls.get_instance_list(input_fcts)
         if axes is None:
             if layout == "auto":
                 total = len(instances_list)
@@ -439,6 +516,23 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
         else:
             if axis is None:
                 return fig
+
+    def change_category(cls, value, input_fcts=None):
+        """ Changes the input category of the ActivationFunctions passed
+        in input_fcts / calling class depending on the parameters.
+        This will create a new distribution on new input when visualizing the respective 
+        Activation Functions.
+
+        Arguments:
+            value (String): The name of the new category for visualisation
+            input_fcts ((Union(List, Dict, torch.nn.Module))): The ActivationFunctions 
+            for which the category should be changed. Default ``None``, in which case 
+            the instances of the classes get assigned a new category.
+        """
+        value = str(value)
+        instances = cls.get_instance_list(input_fcts)
+        for inst in instances:
+            inst.current_inp_category = value
 
     @property
     def current_inp_category(self):
@@ -631,6 +725,51 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
         return x_min, x_max, size
 
     @classmethod
+    def get_instance_list(cls, input_fcts = None):
+        """ 
+
+        Arguments:
+            input_fcts (Union(List, Dict, torch.nn.Module)):
+                The input ActivationFunctions which are to be retrieved.
+                Default ``None``, in that case the instances of the calling
+                class are used for retrieving.
+
+        Returns:
+            list: A list of Activation Functions.
+        """
+        needsModifying = True
+        if input_fcts is None:
+            needsModifying = False
+            instances_list = cls._get_instances()
+        elif isinstance(input_fcts, torch.nn.Module):
+            instances_list = get_toplevel_functions(input_fcts)
+        elif type(input_fcts) is  list:
+            instances_list = input_fcts
+        elif type(input_fcts) is dict:
+            instances_list = []
+            for key in input_fcts:
+                curr_instc = input_fcts[key]
+                if isinstance(curr_instc, ActivationModule):
+                    instances_list.append(curr_instc)
+                elif type(curr_instc) is list: 
+                    instances_list.extend(curr_instc)
+
+        if needsModifying:
+            new_list = []
+            for inst in instances_list:
+                if type(inst) is not cls:
+                    cls.logger.warn(f"Removed {inst} since it's not a Submodule of {cls} class")
+                else:
+                    new_list.append(inst)
+            instances_list = new_list
+            cls.logger.info(f"Returning modified list {instances_list}")    
+        if len(instances_list) == 0:
+            cls.logger.critical("Empty instance list, cannot be used for visualization purposes")
+            raise ValueError()
+        return instances_list
+
+
+    @classmethod
     def _get_instances(cls):
         """
         if called from ActivationModule: returning all instanciated functions
@@ -651,9 +790,11 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
                 print(f"Unknown {cls} for show_all")  # shall never happen
                 return []
         return instances_list
+    
+
 
     @classmethod
-    def show_all(cls, x=None, fitted_function=True, other_func=None,
+    def show_all(cls, input_fcts=None, x=None, fitted_function=True, other_func=None,
                  display=True, tolerance=0.001, title=None, axes=None,
                  layout="auto", writer=None, step=None, colors="#1f77b4"):
         """
@@ -661,6 +802,10 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
         it if ``returns=True``).
 
         Arguments:
+                input_fcts (Union(List, Dict, torch.nn.Module)):
+                    The input ActivationFunctions which are to be visualized.
+                    Default ``None``, in that case the instances of the calling
+                    class are used for visualization.
                 x (range):
                     The range to print the function on.\n
                     Default ``None``
@@ -701,8 +846,8 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
                     If None, incrementing itself.
                     Default ``None``
         """
+        instances_list = cls.get_instance_list(input_fcts)
         logger = ActivationLogger(f"{cls.__name__}Logger")
-        instances_list = cls._get_instances()
         if axes is None:
             if layout == "auto":
                 total = len(instances_list)
@@ -779,7 +924,6 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
         if self.distributions is not None:
             _state_dict["distributions"] = self.distributions
         return _state_dict
-
 
 
 if __name__ == '__main__':
