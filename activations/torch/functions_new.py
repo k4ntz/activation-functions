@@ -87,9 +87,9 @@ def create_colors(n):
     return colors
 
 def _save_inputs(self, input, output):
-    if self._selected_distribution is None:
+    if self.current_inp_distribution is None:
         raise ValueError("Selected distribution is none")
-    self._selected_distribution.fill_n(input[0])
+    self.current_inp_distribution.fill_n(input[0])
 
 
 def _save_gradients(self, in_grad, out_grad):
@@ -99,9 +99,9 @@ def _save_gradients(self, in_grad, out_grad):
 
 def _save_inputs_auto_stop(self, input, output):
     self.inputs_saved += 1
-    if self._selected_distribution is None:
+    if self.current_inp_distribution is None:
         raise ValueError("Selected distribution is none")
-    self._selected_distribution.fill_n(input[0])
+    self.current_inp_distribution.fill_n(input[0])
     if self.inputs_saved > self._max_saves:
         self.training_mode()
 
@@ -161,10 +161,13 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
         self.distributions = None
         self._saving_input = False
         self.mode = "categories"
+        self._handle_inputs = None
+        self.inp_bin_width = "auto"
 
 
 
-    @property
+
+    """ @property
     def mode(self):
         return self.mode 
 
@@ -178,8 +181,23 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
         if value.lower() in allowed_modes: 
             self.mode = value
             from .utils.histograms_numpy import Histogram
-            self.histo_func = Histogram
+            self.histo_func = Histogram """
 
+    def get_mode_func(self, value, device):
+        value = str(value)
+        allowed_modes = ["categories"]
+        if value.lower() in allowed_modes: 
+            can_cupy = af_utils.can_use_cupy(device)
+            if can_cupy:
+                from activations.torch.utils.histograms_cupy import Histogram
+                histo_func = Histogram
+            else: 
+                from activations.torch.utils.histograms_numpy import Histogram
+                histo_func = Histogram 
+            return histo_func
+        else: 
+            self.logger.critical("Mode is currently not supported")
+            raise ValueError()
 
 
     @property
@@ -230,19 +248,14 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
         if self._handle_inputs is not None:
             # print("Already in retrieve mode")
             return
-        can_use_cupy = af_utils.can_use_cupy(device)
-        if can_use_cupy:
-            from activations.torch.utils.histograms_cupy import Histogram
-        else:
-            from activations.torch.utils.histograms_numpy import Histogram
         
-        if "categor" in mode.lower():
-            self._selected_distribution = Histogram(bin_width)
-            if category_name is not None:
-                self.categories = [category_name]
-                self.distributions = [self._selected_distribution]
-        else:
-            raise ValueError("Mode is currently not supported")
+        #get function that creates histogram
+        histo_func = self.get_mode_func(mode, self.device)
+        
+        inp_distr = histo_func(bin_width)
+        if category_name is not None:
+            self.categories = [category_name]
+            self.distributions = [inp_distr]
         
 
         self._inp_bin_width = bin_width
@@ -571,7 +584,8 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
     @inp_bin_width.setter
     def inp_bin_width(self, value):
         try:
-            value = float(value)
+            if "auto" not in value:
+                value = float(value)
             self.bin_width = value
         except ValueError:
             self.logger.warn(f'''
@@ -595,7 +609,7 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
         #distributions under the same name?
         """ if value == self.current_inp_category:
             return """
-        if "cuda" in self.device:
+        if af_utils.can_use_cupy(self.device):
             from activations.torch.utils.histograms_cupy import Histogram
         else:
             from activations.torch.utils.histograms_numpy import Histogram
@@ -606,7 +620,7 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
             if self.distributions[i].is_empty:
                 del self.distributions[i]
                 del self.categories[i]
-        new_distribution = Histogram(self._inp_bin_width)
+        new_distribution = Histogram(self.inp_bin_width)
         self.distributions.append(new_distribution)
         self.categories.append(value)
 
