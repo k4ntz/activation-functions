@@ -1,15 +1,13 @@
-
-from modulefinder import Module
-from venv import create
 def can_use_cupy(device): 
     first_ok = "cuda" in device 
     second_ok = False
     try:
         import cupy as _ 
         second_ok = True
-    except ModuleNotFoundError:
+    except (ModuleNotFoundError, ImportError) as e:
         second_ok = False
     return first_ok and second_ok
+
 
 def create_histograms(inp_histograms, device, want_cupy=False):
     created_histograms = []
