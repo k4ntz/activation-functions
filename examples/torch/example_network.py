@@ -7,6 +7,7 @@ import torch.nn as nn
 from activations.torch import ReLU, LReLU
 from torch import optim
 import torch
+from activations.torch.functions_new import ActivationModule
 
 from activations.utils.activation_logger import ActivationLogger
 
@@ -125,7 +126,7 @@ savePath = "/home/patrick/Desktop/activation-functions/activations/torch/saved_f
 
 dicts = ReLU.state_dicts()
 torch.save(dicts[0], savePath)
-testAFs = LReLU()
-testAFs.load_state_dict(torch.load(savePath))
+testAFs = [LReLU(), LReLU()]
+ActivationModule.load_state_dicts(torch.load(savePath), input_fcts = testAFs)
 #returnedDict = testAFs.state_dict()
 LReLU.show_all()

@@ -323,6 +323,14 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
             self._handle_grads = self.register_full_backward_hook(_save_gradients)
 
     @classmethod
+    def load_state_dicts(cls, dicts, input_fcts = None, *args, **kwargs):
+        instances_list = cls.get_instance_list(input_fcts)
+        assert len(instances_list) == len(dicts), "Number of loaded instances must match number of entries in the dict"
+        for i, instance in enumerate(instances_list):
+            instance.load_state_dict(dicts[i], *args, **kwargs)
+
+
+    @classmethod
     def state_dicts(cls, input_fcts = None, *args, **kwargs):
         """Returns a list of state dicts for the input ActivationModules input_fcts. If it is none, 
         a list of state dicts from the calling class is returned instead.
