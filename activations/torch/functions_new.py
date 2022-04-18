@@ -1,3 +1,4 @@
+from multiprocessing.sharedctypes import Value
 import torch
 import torch.nn.functional as F
 from activations.utils.utils import _get_auto_axis_layout, _cleared_arrays
@@ -138,15 +139,48 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
                 self.forward = self.activation_function.__forward__
             else:
                 self.forward = self.activation_function
-        self._handle_inputs = None
+
+        """ self._handle_inputs = None
         self._handle_grads = None
         self._saving_input = False
         self.distributions = []
+        self.categories = ["distribution"]
+        self._selected_distribution = None
+        self._selected_distribution_name = "distribution" """
+
+        self._init_inp_distributions()
+
         if device is None:
             self.device = "cuda" if torch.cuda.is_available() else "cpu"
         else:
             self.device = device
         self.use_kde = True
+
+    def _init_inp_distributions(self):
+        self.categories = ["distribution"]
+        self.distributions = None
+        self._saving_input = False
+        self.mode = "categories"
+
+
+
+    @property
+    def mode(self):
+        return self.mode 
+
+    @mode.setter
+    def mode(self, value):
+        value = str(value)
+        if value == self.mode:
+            self.logger.info("Mode is already in the specified one")
+            return
+        allowed_modes = ["categories"]
+        if value.lower() in allowed_modes: 
+            self.mode = value
+            from .utils.histograms_numpy import Histogram
+            self.histo_func = Histogram
+
+
 
     @property
     def classname(self):
@@ -157,13 +191,18 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
             return "Unknown"  # TODO, implement
 
     def save_inputs(self, saving=True, auto_stop=False, max_saves=1000,
-                    bin_width=0.1, mode="all", category_name=None):
+                    bin_width=0.1, mode="categories", category_name=None):
         """
         Will retrieve the distribution of the input in self.distribution. \n
         This will slow down the function, as it has to retrieve the input \
         dist.\n
 
         Arguments:
+                saving (bool):
+                    If True, inputs passing through the activation function 
+                    are saved for distribution visualisation. If set to false,
+                    the inputs are not retrieved anymore when data flows 
+                    through the activation function
                 auto_stop (bool):
                     If True, the retrieving will stop after `max_saves` \
                     calls to forward.\n
@@ -178,8 +217,7 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
                     Default ``0.1``
                 mode (str):
                     The mode for the input retrieve.\n
-                    Have to be one of ``all``, ``categories``, ...
-                    Default ``all``
+                    Currently only ``categories`` is supported.
                 category_name (str):
                     The name of the category
                     Default ``0``
@@ -192,38 +230,24 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
         if self._handle_inputs is not None:
             # print("Already in retrieve mode")
             return
-        if "cuda" in self.device:
-            if "neurons" in mode.lower():
-                from activations.torch.utils.histograms_cupy import NeuronsHistogram as Histogram
-            else:
-                from activations.torch.utils.histograms_cupy import Histogram
+        can_use_cupy = af_utils.can_use_cupy(device)
+        if can_use_cupy:
+            from activations.torch.utils.histograms_cupy import Histogram
         else:
-            if "neurons" in mode.lower():
-                from activations.torch.utils.histograms_numpy import NeuronsHistogram as Histogram
-            else:
-                from activations.torch.utils.histograms_numpy import Histogram
-        #TODO: should this be refactored, because currently 
-        #if category_name is not none but mode is all, name will just 
-        #be "distribution" -> unintuitive 
+            from activations.torch.utils.histograms_numpy import Histogram
         
         if "categor" in mode.lower():
-            if category_name is None:
-                self._selected_distribution_name = None
-                self.categories = []
-                self._selected_distribution = None
-                self.distributions = []
-            else:
-                self._selected_distribution_name = category_name
+            self._selected_distribution = Histogram(bin_width)
+            if category_name is not None:
                 self.categories = [category_name]
-                self._selected_distribution = Histogram(bin_width)
                 self.distributions = [self._selected_distribution]
         else:
-            self._selected_distribution_name = "distribution"
-            self.categories = ["distribution"]
-            self._selected_distribution = Histogram(bin_width)
-            self.distributions = [self._selected_distribution]
-        self._irm = mode  # input retrieval mode
+            raise ValueError("Mode is currently not supported")
+        
+
         self._inp_bin_width = bin_width
+
+        
         if auto_stop:
             self.inputs_saved = 0
             self._handle_inputs = self.register_forward_hook(_save_inputs_auto_stop)
@@ -284,15 +308,6 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
             self._max_saves = max_saves
         else:
             self._handle_grads = self.register_full_backward_hook(_save_gradients)
-
-    # def training_mode(self):
-    #     """
-    #     Stops retrieving the distribution of the input in `self.distribution`.
-    #     """
-    #     print("Training mode, no longer retrieving the input.")
-    #     self._handle_inputs.remove()
-    #     self._handle_inputs = None
-
 
     @classmethod
     def state_dicts(cls, input_fcts = None, *args, **kwargs):
@@ -507,10 +522,7 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
         if self.distributions:
             if self.distribution_display_mode in ["kde", "bar"]:
                 ax2 = axis.twinx()
-                if "neurons" in self._irm:
-                    x = self.plot_layer_distributions(ax2)
-                else:
-                    x = self.plot_distributions(ax2, color)
+                x = self.plot_distributions(ax2, color)
             elif self.distribution_display_mode == "points":
                 x0, x_last, _ = self.get_distributions_range()
                 x_edges = torch.tensor([x0, x_last]).float()
@@ -553,34 +565,50 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
             inst.current_inp_category = value
 
     @property
+    def inp_bin_width(self):
+        return self.bin_width
+
+    @inp_bin_width.setter
+    def inp_bin_width(self, value):
+        try:
+            value = float(value)
+            self.bin_width = value
+        except ValueError:
+            self.logger.warn(f'''
+                Passed value is not convertable to number, 
+                staying with original value, which is {self.inp_bin_width}
+            ''')
+        
+
+    @property
+    def current_inp_distribution(self):
+        return self.distributions[-1]
+                
+    @property
     def current_inp_category(self):
-        return self._selected_distribution_name
+        return self.categories[-1]
 
     @current_inp_category.setter
     def current_inp_category(self, value):
-        if value == self._selected_distribution_name:
-            return
+        value = str(value)
+        #TODO: do we want to prevent users from creating two different 
+        #distributions under the same name?
+        """ if value == self.current_inp_category:
+            return """
         if "cuda" in self.device:
-            if "neurons" in self._irm.lower():
-                from activations.torch.utils.histograms_cupy import NeuronsHistogram as Histogram
-            else:
-                from activations.torch.utils.histograms_cupy import Histogram
+            from activations.torch.utils.histograms_cupy import Histogram
         else:
-            if "neurons" in self._irm.lower():
-                from activations.torch.utils.histograms_numpy import NeuronsHistogram as Histogram
-            else:
-                from activations.torch.utils.histograms_numpy import Histogram
+            from activations.torch.utils.histograms_numpy import Histogram
         #if the histogram is empty, it means that is was created at the same phase
         #that the current category is created, which means that no input was perceived
         #during this time -> redundant category
         for i in range(len(self.distributions)):
-            if self.distributions[i]._empty:
+            if self.distributions[i].is_empty:
                 del self.distributions[i]
                 del self.categories[i]
-        self._selected_distribution = Histogram(self._inp_bin_width)
-        self.distributions.append(self._selected_distribution)
+        new_distribution = Histogram(self._inp_bin_width)
+        self.distributions.append(new_distribution)
         self.categories.append(value)
-        self._selected_distribution_name = value
 
     def plot_distributions(self, ax, colors=None, bin_size=None):
         """
@@ -944,6 +972,7 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
     def state_dict(self, destination=None, *args, **kwargs):
         _state_dict = super().state_dict(destination, *args, **kwargs)
         if self.distributions is not None:
+            import ipdb; ipdb.set_trace()
             _state_dict["distributions"] = self.distributions
             _state_dict["inp_category"] = self.current_inp_category
         return _state_dict
