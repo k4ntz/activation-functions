@@ -327,6 +327,7 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
         instances_list = cls.get_instance_list(input_fcts)
         assert len(instances_list) == len(dicts), "Number of loaded instances must match number of entries in the dict"
         for i, instance in enumerate(instances_list):
+            import ipdb; ipdb.set_trace()
             instance.load_state_dict(dicts[i], *args, **kwargs)
 
 
@@ -825,7 +826,7 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
         if needsModifying:
             new_list = []
             for inst in instances_list:
-                if type(inst) is not cls:
+                if not issubclass(type(inst), cls):
                     cls.logger.warn(f"Removed {inst} since it's not a Submodule of {cls} class")
                 else:
                     new_list.append(inst)
@@ -994,7 +995,6 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
     def state_dict(self, destination=None, *args, **kwargs):
         _state_dict = super().state_dict(destination, *args, **kwargs)
         if self.distributions is not None:
-            import ipdb; ipdb.set_trace()
             _state_dict["distributions"] = self.distributions
             _state_dict["inp_category"] = self.current_inp_category
         return _state_dict
