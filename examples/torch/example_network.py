@@ -8,6 +8,8 @@ from activations.torch import ReLU, LReLU
 from torch import optim
 import torch
 
+from activations.utils.activation_logger import ActivationLogger
+
 
 class MnistCNN(nn.Module):
     def __init__(self, *args, **kwargs):
@@ -114,12 +116,16 @@ testLoader = DL(test_data, batch_size=64, shuffle=True)
 model = MnistCNN()
 
 num_epochs = 1
-LReLU.show_all(model)
-
-
-""" ReLU.save_all_inputs(category_name="train")
-train(num_epochs, model, trainLaoder)
-ReLU.save_all_inputs(category_name="eval")
+ReLU.save_all_inputs(category_name="train")
 eval(model, testLoader)
 ReLU.show_all()
-ReLU.save_all_inputs(saving=False) """
+ReLU.save_all_inputs(saving=False)
+
+savePath = "/home/patrick/Desktop/activation-functions/activations/torch/saved_functions/test.pt"
+
+dicts = ReLU.state_dicts()
+torch.save(dicts[0], savePath)
+testAFs = LReLU()
+testAFs.load_state_dict(torch.load(savePath))
+#returnedDict = testAFs.state_dict()
+LReLU.show_all()
