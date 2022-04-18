@@ -1,4 +1,4 @@
-from .functions import ActivationModule
+from .functions_new import ActivationModule
 import torch.nn.functional as F
 from torch import sin
 
