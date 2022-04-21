@@ -19,7 +19,8 @@ class Histogram():
             self._auto_bin_size = False
             self._bin_size = float(bin_size)
             self._rd = int(np.log10(1./bin_size).item())
-            self._fill_iplm = self._first_time_fill
+        
+        self._fill_iplm = self._first_time_fill
 
     def fill_n(self, input):
         self._fill_iplm(input.detach().numpy())

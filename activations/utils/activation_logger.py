@@ -38,13 +38,13 @@ class ActivationLogger(object):
         console.setLevel(log_level)
 
         messageFormat = self.setFormatter(show_logger_name, show_time)
-
         if os.name != 'nt':
             console.setFormatter(ColoredFormatter(messageFormat))
         if os.name == 'nt':
             console.setFormatter(messageFormat)
 
-        self._logger.addHandler(console)
+        if not self._logger.hasHandlers():
+            self._logger.addHandler(console)
 
 
     def debug(self, msg):
@@ -78,5 +78,4 @@ class ActivationLogger(object):
             format = format + ' | '
 
         format = format + '%(filename)s | %(lineno)d | %(message)s'
-
         return format
