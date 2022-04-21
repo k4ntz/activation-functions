@@ -117,10 +117,10 @@ testLoader = DL(test_data, batch_size=64, shuffle=True)
 model = MnistCNN()
 
 num_epochs = 1
-ReLU.save_all_inputs(category_name="train")
-eval(model, testLoader)
-ReLU.show_all()
-ReLU.save_all_inputs(saving=False)
+ReLU.save_all_inputs()
+train(1, model, trainLaoder)
+ReLU.show_all_gradients()
+ReLU.save_all_gradients(saving=False)
 
 savePath = "/home/patrick/Desktop/activation-functions/activations/torch/saved_functions/test.pt"
 
@@ -129,4 +129,4 @@ torch.save(dicts, savePath)
 testAFs = [LReLU(), LReLU()]
 ActivationModule.load_state_dicts(torch.load(savePath), input_fcts = testAFs)
 #returnedDict = testAFs.state_dict()
-LReLU.show_all()
+LReLU.show_all_gradients()

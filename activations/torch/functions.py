@@ -377,7 +377,8 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
             else:
                 axis.bar(x, weights/weights.max(), width=x[1] - x[0],
                          linewidth=0, alpha=0.4, color=col, label=label)
-            distribution.empty()
+            #TODO: ??? what is this doing here?
+            #distribution.empty()
         if writer is not None:
             try:
                 writer.add_figure(title, fig, step)
