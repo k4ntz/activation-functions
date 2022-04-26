@@ -14,11 +14,13 @@ from random import randint
 
 _LINED = dict()
 
+
 def create_colors(n):
     colors = []
     for i in range(n):
         colors.append('#%06X' % randint(0, 0xFFFFFF))
     return colors
+
 
 def _save_inputs(self, input, output):
     if self._selected_distribution is None:
