@@ -464,7 +464,7 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
         #that the current category is created, which means that no input was perceived
         #during this time -> redundant category
         for i in range(len(self.distributions)):
-            if self.distributions[i]._empty:
+            if self.distributions[i].is_empty:
                 del self.distributions[i]
                 del self.categories[i]
         self._selected_distribution = Histogram(self._inp_bin_width)
