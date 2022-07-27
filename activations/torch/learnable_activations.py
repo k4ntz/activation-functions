@@ -16,12 +16,20 @@ def tent_activation(x, delta):
     return torch.clamp(delta - torch.abs(x), min=0)
 
 
+def bitent_activation(x, delta):
+    """
+    Functional implementation of BiTentActivation.
+    """
+    hdt = delta/2
+    return -tent_activation(x+hdt, hdt) + tent_activation(x-hdt, hdt)
+
+
 class TentActivation(ActivationModule):
     distribution_display_mode = "kde"
     list = []
     logger = ActivationLogger("TentActivation Logger")
 
-    def __init__(self, delta: Union[torch.Tensor, float] = 1.0, lb=0.0, ub=500.0, learnable: bool = False):
+    def __init__(self, delta: Union[torch.Tensor, float] = 2.0, lb=0.0, ub=500.0, learnable: bool = False):
         """
         Applies element-wise Tent(x) = max(0, delta - |x|)
         :param delta: The delta which is used as initialization
@@ -46,7 +54,7 @@ class TentActivation(ActivationModule):
         return f'delta={self.delta}, lb={self.lb}, ub={self.ub}, learnable={self.learnable}'
 
     def __str__(self):
-        return "Tent"
+        return "BiTent"
 
     @classmethod
     def show_all(cls, x=None, fitted_function=True, other_func=None,
@@ -147,3 +155,8 @@ class TentActivation(ActivationModule):
             plt.show()
         else:
             return fig
+
+
+class BiTentActivation(TentActivation):
+    def forward(self, x: Tensor) -> Tensor:
+        return bitent_activation(x, self.delta)

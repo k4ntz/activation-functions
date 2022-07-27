@@ -413,13 +413,71 @@ class Rational(ActivationModule, Rational_base):
             print("saving_input of rationals should be set with booleans")
 
 
+# class RARE(ActivationModule, Rational_base):
+#     # methods from rat
+#     saving_input = Rational.saving_input
+#     training_mode = Rational.training_mode
+#
+#     def __init__(self, approx_func="onesin", degrees=(6, 4), cuda=None,
+#                  k=1., k_trainable=False, name=None):
+#         if name is None:
+#             name = f"RARE {degrees}"
+#         ActivationModule.__init__(self, name)
+#         Rational_base.__init__(self, name)
+#
+#         if cuda is None:
+#             cuda = torch_cuda_available()
+#         if cuda is True:
+#             device = "cuda"
+#         elif cuda is False:
+#             device = "cpu"
+#         else:
+#             device = cuda
+#
+#         self.k = nn.Parameter(torch.FloatTensor([k]).to(device),
+#                               requires_grad=k_trainable)
+#         _m, _n = degrees
+#         # self.numerator = nn.Parameter(-1 * torch.ones(_m-2).to(device),
+#         #                               requires_grad=True)
+#         # self.denominator = nn.Parameter(torch.ones(_n).to(device),
+#         #                                 requires_grad=True)
+#         # self.numerator = nn.Parameter(torch.randn(_m-2).to(device),
+#         #                               requires_grad=True)
+#         # self.denominator = nn.Parameter(torch.randn(_n).to(device),
+#         #                                 requires_grad=True)
+#         w_numerator, w_denominator = get_parameters("rare", (_m, _n),
+#                                                     approx_func, k=k)
+#
+#         self.numerator = nn.Parameter(torch.FloatTensor(w_numerator).to(device),
+#                                       requires_grad=True)
+#         self.denominator = nn.Parameter(torch.FloatTensor(w_denominator).to(device),
+#                                         requires_grad=True)
+#         self.register_parameter("numerator", self.numerator)
+#         self.register_parameter("denominator", self.denominator)
+#         self.device = device
+#         self.degrees = degrees
+#         self.version = "RARE"
+#         self.training = True
+#
+#         self.init_approximation = approx_func
+#         self._saving_input = False
+#
+#         self.activation_function = Rational_Spline_F
+#         self._handle_retrieve_mode = None
+#         self._handle_gradient_retrieve_mode = None
+#         self.distributions = None
+#
+#     def forward(self, x):
+#         return self.activation_function(x, self.k, self.numerator,
+#                                         self.denominator, self.training)
+
 class RARE(ActivationModule, Rational_base):
     # methods from rat
     saving_input = Rational.saving_input
     training_mode = Rational.training_mode
 
     def __init__(self, approx_func="onesin", degrees=(6, 4), cuda=None,
-                 k=1., k_trainable=False, name=None):
+                 k=2., k_trainable=False, name=None):
         if name is None:
             name = f"RARE {degrees}"
         ActivationModule.__init__(self, name)
@@ -437,14 +495,6 @@ class RARE(ActivationModule, Rational_base):
         self.k = nn.Parameter(torch.FloatTensor([k]).to(device),
                               requires_grad=k_trainable)
         _m, _n = degrees
-        # self.numerator = nn.Parameter(-1 * torch.ones(_m-2).to(device),
-        #                               requires_grad=True)
-        # self.denominator = nn.Parameter(torch.ones(_n).to(device),
-        #                                 requires_grad=True)
-        # self.numerator = nn.Parameter(torch.randn(_m-2).to(device),
-        #                               requires_grad=True)
-        # self.denominator = nn.Parameter(torch.randn(_n).to(device),
-        #                                 requires_grad=True)
         w_numerator, w_denominator = get_parameters("rare", (_m, _n),
                                                     approx_func, k=k)
 
@@ -462,17 +512,23 @@ class RARE(ActivationModule, Rational_base):
         self.init_approximation = approx_func
         self._saving_input = False
 
-        self.activation_function = Rational_Spline_F
+        if "cuda" in str(device):
+            rational_func = Rational_CUDA_B_F
+            if 'apply' in dir(rational_func):
+                self.activation_function = rational_func.apply
+            else:
+                self.activation_function = rational_func
+        else:
+            rational_func = Rational_PYTORCH_B_F
+
+            self.activation_function = rational_func
         self._handle_retrieve_mode = None
         self._handle_gradient_retrieve_mode = None
         self.distributions = None
 
     def forward(self, x):
-        return self.activation_function(x, self.k, self.numerator,
-                                        self.denominator, self.training)
-
-
-
+        return self.activation_function(x, self.numerator, self.denominator,
+                                        self.training).mul(torch.relu(x+self.k)).mul(-torch.relu(-x+self.k))
 
 
 

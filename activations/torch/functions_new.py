@@ -1,4 +1,3 @@
-from multiprocessing.sharedctypes import Value
 import torch
 import torch.nn.functional as F
 from activations.utils.utils import _get_auto_axis_layout, _cleared_arrays
@@ -122,7 +121,7 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
     instances = {}
     histograms_colors = ["red", "green", "black"]
     distribution_display_mode = "kde"
-    logger = ActivationLogger("ActivationModule Logger")
+    logger = ActivationLogger("GenericActivation Logger")
     
 
     def __init__(self, function, device=None):
@@ -130,6 +129,7 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
             self.type = function
             function = None
         super().__init__()
+        self.logger = ActivationLogger(f"ActivationLogger: {function}")
         if self.classname not in self.instances:
             self.instances[self.classname] = []
         self.instances[self.classname].append(self)
@@ -139,6 +139,14 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
                 self.forward = self.activation_function.__forward__
             else:
                 self.forward = self.activation_function
+
+        """ self._handle_inputs = None
+        self._handle_grads = None
+        self._saving_input = False
+        self.distributions = []
+        self.categories = ["distribution"]
+        self._selected_distribution = None
+        self._selected_distribution_name = "distribution" """
 
         self._init_inp_distributions()
         self._init_grad_distributions()
@@ -248,7 +256,7 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
                 self.logger.warn("Not retrieving input anymore")
                 self._handle_inputs.remove()
             self._handle_inputs = None
-            return 
+            return
         if self._handle_inputs is not None:
             # print("Already in retrieve mode")
             return
@@ -465,7 +473,7 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
                                       color=col, label=label)
                 else:
                     self.logger.warn("The bin size is too big, bins contain too few "
-                                     f"elements.\nbins: {x}", )
+                                     f"elements.\nbins: {x}")
                     axis.bar([], []) # in case of remove needed
             else:
                 axis.bar(x, weights/weights.max(), width=x[1] - x[0],
@@ -476,7 +484,7 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
             try:
                 writer.add_figure(title, fig, step)
             except AttributeError:
-                self.logger.error("Could not use the given SummaryWriter to add the Rational figure", )
+                self.logger.error("Could not use the given SummaryWriter to add the Rational figure")
         elif display:
             plt.legend()
             plt.show()
@@ -591,7 +599,7 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
              color=None):
         #Construct x axis
         if not self.can_show_inp:
-            self.logger.error("Cannot show input distribution, since no inputs were saved for it", )
+            self.logger.error("Cannot show input distribution, since no inputs were saved for it")
             return
         if x is None:
             x = torch.arange(-3., 3, 0.01)
@@ -624,7 +632,7 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
             try:
                 writer.add_figure(title, fig, step)
             except AttributeError:
-                self.logger.error("Could not use the given SummaryWriter to add the Rational figure", )
+                self.logger.error("Could not use the given SummaryWriter to add the Rational figure")
         elif display:
             plt.show()
         else:
@@ -732,7 +740,7 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
                                                color=color, label=inp_label)
                     else:
                         self.logger.warn(f"The bin size is too big, bins contain too few "
-                              "elements.\nbins: {x}", )
+                              "elements.\nbins: {x}")
                         fill = ax.bar([], []) # in case of remove needed
                     size = x[1] - x[0]
                 else:

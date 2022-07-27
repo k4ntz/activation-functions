@@ -43,38 +43,14 @@ class ActivationLogger(object):
         self.show_time = show_time
 
 
-
-        messageFormat = self.getFormatter("tst")
-        self.console = console
+        messageFormat = self.setFormatter(show_logger_name, show_time)
         if os.name != 'nt':
             console.setFormatter(ColoredFormatter(messageFormat))
         if os.name == 'nt':
             console.setFormatter(messageFormat)
 
-        #TODO: is this relevant?
-        #if not self._logger.hasHandlers():
-        self._logger.addHandler(self.console)
-
-
-    def setFormatter(self, filename):
-        format = self.getFormatter(filename)
-        c_fmt = ColoredFormatter(format)
-        self.console.setFormatter(c_fmt)
-        
-
-    def _track_history(self, save = True):
-        if save:
-            self.logger_history = set([])
-        else: 
-            self.logger_history = None
-
-    def log_multiple(self, msg, func):
-        if self.logger_history is not None: 
-            if msg not in self.logger_history:
-                func(msg)
-                self.logger_history.add(msg)
-        else: 
-            func(msg)
+        if not self._logger.hasHandlers():
+            self._logger.addHandler(console)
 
 
     def debug(self, msg):
@@ -111,5 +87,6 @@ class ActivationLogger(object):
 
         if len(format) > 0:
             format = format + ' | '
-        format = format + '%(filename_set)s | %(message)s'
+
+        format = format + '%(filename)s | %(lineno)d | %(message)s'
         return format
