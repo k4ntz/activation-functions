@@ -9,12 +9,9 @@ import seaborn as sns
 import numpy as np
 from termcolor import colored
 from random import randint
-import activations.torch.utils.af_utils as af_utils
 
 _LINED = dict()
 
-<<<<<<< HEAD
-=======
 def get_toplevel_functions(network):
         dict_afs = _get_activations(network)
         functions = []
@@ -80,7 +77,6 @@ def _process_recursive(original_dict, recName, recObject):
                 original_dict, name, object)
             af_list.extend(original_dict[wholeName])
     return af_list
->>>>>>> refactored util code into functions itself
 
 def create_colors(n):
     colors = []
@@ -206,10 +202,6 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
                 from activations.torch.utils.histograms_numpy import NeuronsHistogram as Histogram
             else:
                 from activations.torch.utils.histograms_numpy import Histogram
-        #TODO: should this be refactored, because currently 
-        #if category_name is not none but mode is all, name will just 
-        #be "distribution" -> unintuitive 
-        
         if "categor" in mode.lower():
             if category_name is None:
                 self._selected_distribution_name = None
@@ -297,19 +289,6 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
     #     self._handle_inputs.remove()
     #     self._handle_inputs = None
 
-
-    @classmethod
-    def state_dicts(cls, input_fcts = None, *args, **kwargs):
-        """Returns a list of state dicts for the input ActivationModules input_fcts. If it is none, 
-        a list of state dicts from the calling class is returned instead.
-        """
-        instances_list = cls.get_instance_list(input_fcts)
-        state_dicts = []
-        for instance in instances_list:
-            curr_dict = instance.state_dict(*args, **kwargs)
-            state_dicts.append(curr_dict)
-        return state_dicts
-
     @classmethod
     def save_all_inputs(cls, input_fcts = None, *args, **kwargs):
         """Saves input that the Activation Functions perceive when data flows through them.
@@ -381,8 +360,7 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
             else:
                 axis.bar(x, weights/weights.max(), width=x[1] - x[0],
                          linewidth=0, alpha=0.4, color=col, label=label)
-            #TODO: ??? what is this doing here?
-            #distribution.empty()
+            distribution.empty()
         if writer is not None:
             try:
                 writer.add_figure(title, fig, step)
@@ -933,24 +911,19 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
     #     object.__setattr__(self, key, value)
 
 
-
-    def load_state_dict(self, state_dict):
-        if "distributions" in state_dict.keys():
-            _distributions = state_dict.pop("distributions")
-            _inp_category = state_dict.pop("inp_category")
-            created_distributions, msg = af_utils.create_histograms(_distributions, self.device)
-            self.logger.info(msg)
-            self.distributions = created_distributions
-            self.current_inp_category = _inp_category
-        super().load_state_dict(state_dict)
-
-
-
+    # def load_state_dict(self, state_dict):
+    #     if "distributions" in state_dict.keys():
+    #         _distributions = state_dict.pop("distributions")
+    #         if "cuda" in self.device and _cupy_installed():
+    #             msg = f"Loading input distributions on {self.device} using cupy"
+    #             RationalLoadWarning.warn(msg)
+    #             self.distributions = _distributions
+    #     super().load_state_dict(state_dict)
+    #
     def state_dict(self, destination=None, *args, **kwargs):
         _state_dict = super().state_dict(destination, *args, **kwargs)
         if self.distributions is not None:
             _state_dict["distributions"] = self.distributions
-            _state_dict["inp_category"] = self.current_inp_category
         return _state_dict
 
 

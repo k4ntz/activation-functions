@@ -1,4 +1,3 @@
-from multiprocessing.sharedctypes import Value
 import torch
 import torch.nn.functional as F
 from activations.utils.utils import _get_auto_axis_layout, _cleared_arrays
