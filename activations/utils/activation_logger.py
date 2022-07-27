@@ -22,6 +22,7 @@ class ColoredFormatter(logging.Formatter):
             logging.WARNING: self.yellow + self.fmt + self.reset
         }
 
+    
 
 
     def format(self, record):
@@ -31,44 +32,78 @@ class ColoredFormatter(logging.Formatter):
 
 
 class ActivationLogger(object):
-    def __init__(self, logger_name, log_level = logging.DEBUG, show_logger_name = True, show_time = False):
+
+    def __init__(self, logger_name, log_level = logging.DEBUG, show_logger_name = True, show_time = False, file = "tst"):
         self._logger = logging.getLogger(logger_name)
         self._logger.setLevel(log_level)
         console = logging.StreamHandler()
         console.setLevel(log_level)
+        self.logger_history = None
+        self.show_name = show_logger_name
+        self.show_time = show_time
 
-        messageFormat = self.setFormatter(show_logger_name, show_time)
+
+
+        messageFormat = self.getFormatter("tst")
+        self.console = console
         if os.name != 'nt':
             console.setFormatter(ColoredFormatter(messageFormat))
         if os.name == 'nt':
             console.setFormatter(messageFormat)
 
-        if not self._logger.hasHandlers():
-            self._logger.addHandler(console)
+        #TODO: is this relevant?
+        #if not self._logger.hasHandlers():
+        self._logger.addHandler(self.console)
+
+
+    def setFormatter(self, filename):
+        format = self.getFormatter(filename)
+        c_fmt = ColoredFormatter(format)
+        self.console.setFormatter(c_fmt)
+        
+
+    def _track_history(self, save = True):
+        if save:
+            self.logger_history = set([])
+        else: 
+            self.logger_history = None
+
+    def log_multiple(self, msg, func):
+        if self.logger_history is not None: 
+            if msg not in self.logger_history:
+                func(msg)
+                self.logger_history.add(msg)
+        else: 
+            func(msg)
 
 
     def debug(self, msg):
-        self._logger.debug(msg)
+        func = self._logger.debug
+        self.log_multiple(msg, func)
 
     def warn(self, msg):
-        self._logger.warn(msg)
+        func = self._logger.warn
+        self.log_multiple(msg, func)
 
     def info(self, msg):
-        self._logger.info(msg)
+        func = self._logger.info
+        self.log_multiple(msg, func)
 
     def error(self, msg):
-        self._logger.error(msg)
+        func = self._logger.error
+        self.log_multiple(msg, func)
 
     def critical(self, msg):
-        self._logger.critical(msg)
+        func = self._logger.critical
+        self.log_multiple(msg, func)
 
-    def setFormatter(self, show_logger_name, show_time):
+    def getFormatter(self, filename_set):
         format = ''
 
-        if show_logger_name:
+        if self.show_name:
             format = '%(name)s'
 
-        if show_time:
+        if self.show_time:
             if len(format) > 0:
                 format = format + ' | '
             
@@ -76,6 +111,5 @@ class ActivationLogger(object):
 
         if len(format) > 0:
             format = format + ' | '
-
-        format = format + '%(filename)s | %(lineno)d | %(message)s'
+        format = format + '%(filename_set)s | %(message)s'
         return format

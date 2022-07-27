@@ -4,8 +4,9 @@ import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
 from torch import Tensor
-from .functions import ActivationModule
+from .functions_new import ActivationModule
 from activations.utils.utils import _get_auto_axis_layout
+from activations.utils.activation_logger import ActivationLogger
 
 
 def tent_activation(x, delta):
@@ -18,6 +19,7 @@ def tent_activation(x, delta):
 class TentActivation(ActivationModule):
     distribution_display_mode = "kde"
     list = []
+    logger = ActivationLogger("TentActivation Logger")
 
     def __init__(self, delta: Union[torch.Tensor, float] = 1.0, lb=0.0, ub=500.0, learnable: bool = False):
         """

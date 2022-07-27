@@ -117,16 +117,20 @@ testLoader = DL(test_data, batch_size=64, shuffle=True)
 model = MnistCNN()
 
 num_epochs = 1
+#TODO: think about whether we want to change this, such that 
+#TODO: users only call show_all / show(method=[gradient, input]]) which 
+#TODO: restricts them from calling stuff that leads to wrong vis
+
+
 ReLU.save_all_inputs()
 train(1, model, trainLaoder)
-ReLU.show_all_gradients()
-ReLU.save_all_gradients(saving=False)
+ReLU.save_all_inputs(saving=False)
 
 savePath = "/home/patrick/Desktop/activation-functions/activations/torch/saved_functions/test.pt"
 
-dicts = ReLU.state_dicts()
+""" dicts = ReLU.state_dicts()
 torch.save(dicts, savePath)
 testAFs = [LReLU(), LReLU()]
 ActivationModule.load_state_dicts(torch.load(savePath), input_fcts = testAFs)
 #returnedDict = testAFs.state_dict()
-LReLU.show_all_gradients()
+LReLU.show_all_gradients() """

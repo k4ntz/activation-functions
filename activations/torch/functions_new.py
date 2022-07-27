@@ -122,14 +122,14 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
     instances = {}
     histograms_colors = ["red", "green", "black"]
     distribution_display_mode = "kde"
-    logger = ActivationLogger("Generic ActivationModule Logger")
+    logger = ActivationLogger("ActivationModule Logger")
+    
 
     def __init__(self, function, device=None):
         if isinstance(function, str):
             self.type = function
             function = None
         super().__init__()
-        self.logger = ActivationLogger(f"ActivationLogger: {function}")
         if self.classname not in self.instances:
             self.instances[self.classname] = []
         self.instances[self.classname].append(self)
@@ -139,14 +139,6 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
                 self.forward = self.activation_function.__forward__
             else:
                 self.forward = self.activation_function
-
-        """ self._handle_inputs = None
-        self._handle_grads = None
-        self._saving_input = False
-        self.distributions = []
-        self.categories = ["distribution"]
-        self._selected_distribution = None
-        self._selected_distribution_name = "distribution" """
 
         self._init_inp_distributions()
         self._init_grad_distributions()
@@ -256,7 +248,7 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
                 self.logger.warn("Not retrieving input anymore")
                 self._handle_inputs.remove()
             self._handle_inputs = None
-            return
+            return 
         if self._handle_inputs is not None:
             # print("Already in retrieve mode")
             return
@@ -337,8 +329,10 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
     def load_state_dicts(cls, dicts, input_fcts = None, *args, **kwargs):
         instances_list = cls.get_instance_list(input_fcts)
         assert len(instances_list) == len(dicts), "Number of loaded instances must match number of entries in the dict"
+        cls.logger._track_history(True)
         for i, instance in enumerate(instances_list):
             instance.load_state_dict(dicts[i], *args, **kwargs)
+        cls.logger._track_history(False)
 
 
     @classmethod
@@ -348,23 +342,50 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
         """
         instances_list = cls.get_instance_list(input_fcts)
         state_dicts = []
+        cls.logger._track_history(True)
         for instance in instances_list:
             curr_dict = instance.state_dict(*args, **kwargs)
             state_dicts.append(curr_dict)
+        cls.logger._track_history(False)
         return state_dicts
 
     @classmethod
     def save_all_inputs(cls, input_fcts = None, *args, **kwargs):
         """Saves input that the Activation Functions perceive when data flows through them.
 
-        Args:
-            input_fcts ((Union(List, Dict, torch.nn.Module))): 
-                The Activation Functions for which the inputs shall be saved. Default ``None``, in 
-                which case the inputs are saved for the calling class. 
+        Arguments:
+                input_fcts ((Union(List, Dict, torch.nn.Module))): 
+                    The Activation Functions for which the inputs shall be saved. Default ``None``, in 
+                    which case the inputs are saved for the calling class. 
+                saving (bool):
+                    If True, inputs passing through the activation function 
+                    are saved for distribution visualisation. If set to false,
+                    the inputs are not retrieved anymore when data flows 
+                    through the activation function
+                auto_stop (bool):
+                    If True, the retrieving will stop after `max_saves` \
+                    calls to forward.\n
+                    Else, use :meth:`torch.Rational.training_mode`.\n
+                    Default ``False``
+                max_saves (int):
+                    The range on which the curves of the functions are fitted \
+                    together.\n
+                    Default ``1000``
+                bin_width (float):
+                    Default bin width for the histogram.\n
+                    Default ``0.1``
+                mode (str):
+                    The mode for the input retrieve.\n
+                    Currently only ``categories`` is supported.
+                category_name (str):
+                    The name of the category
+                    Default ``0`` 
         """
         instances_list = cls.get_instance_list(input_fcts)
+        cls.logger._track_history(True)
         for instance in instances_list:
             instance.save_inputs(*args, **kwargs)
+        cls.logger._track_history(False)
 
     @classmethod
     def save_all_gradients(cls, input_fcts = None, *args, **kwargs):
@@ -373,11 +394,33 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
         Args:
             input_fcts ((Union(List, Dict, torch.nn.Module))): 
                 The Activation Functions for which the gradients shall be saved. Default ``None``, in 
-                which case the gradients are saved for the calling class. 
+                which case the gradients are saved for the calling class.
+            auto_stop (bool):
+                    If True, the retrieving will stop after `max_saves` \
+                    calls to forward.\n
+                    Else, use :meth:`torch.Rational.training_mode`.\n
+                    Default ``False``
+                max_saves (int):
+                    The range on which the curves of the functions are fitted \
+                    together.\n
+                    Default ``1000``
+                bin_width (float):
+                    Default bin width for the histogram.\n
+                    Default ``0.1``
+                mode (str):
+                    The mode for the input retrieve.\n
+                    Have to be one of ``all``, ``categories``, ...
+                    Default ``all``
+                category_name (str):
+                    The mode for the input retrieve.\n
+                    Have to be one of ``all``, ``categories``, ...
+                    Default ``0``
         """
         instances_list = cls.get_instance_list(input_fcts)
+        cls.logger._track_history(True)
         for instance in instances_list:
             instance.save_gradients(*args, **kwargs)
+        cls.logger._track_history(False)
 
     def __repr__(self):
         return f"{self.classname}"
@@ -422,7 +465,7 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
                                       color=col, label=label)
                 else:
                     self.logger.warn("The bin size is too big, bins contain too few "
-                                     f"elements.\nbins: {x}")
+                                     f"elements.\nbins: {x}", )
                     axis.bar([], []) # in case of remove needed
             else:
                 axis.bar(x, weights/weights.max(), width=x[1] - x[0],
@@ -433,7 +476,7 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
             try:
                 writer.add_figure(title, fig, step)
             except AttributeError:
-                self.logger.error("Could not use the given SummaryWriter to add the Rational figure")
+                self.logger.error("Could not use the given SummaryWriter to add the Rational figure", )
         elif display:
             plt.legend()
             plt.show()
@@ -494,8 +537,8 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
                     If None, incrementing itself.
                     Default ``None``
         """
-        logger = ActivationLogger("f{cls.__name__}Logger")
         instances_list = cls.get_instance_list(input_fcts)
+        cls.logger._track_history(True)
         if axes is None:
             if layout == "auto":
                 total = len(instances_list)
@@ -509,7 +552,7 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
                 with sns.axes_style("whitegrid"):
                     fig, axes = plt.subplots(*layout, figsize=figs)
             except ImportError:
-                logger.warn("Could not import seaborn")
+                cls.logger.warn("Could not import seaborn")
                 #RationalImportSeabornWarning.warn()
                 fig, axes = plt.subplots(*layout, figsize=figs)
             if isinstance(axes, plt.Axes):
@@ -538,7 +581,9 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
         elif display:
             plt.legend()
             plt.show()
+            cls.logger._track_history(False)
         else:
+            cls.logger._track_history(False)
             return fig
 
     def show(self, x=None, fitted_function=True, other_func=None, display=True,
@@ -546,7 +591,7 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
              color=None):
         #Construct x axis
         if not self.can_show_inp:
-            self.logger.error("Cannot show input distribution, since no inputs were saved for it")
+            self.logger.error("Cannot show input distribution, since no inputs were saved for it", )
             return
         if x is None:
             x = torch.arange(-3., 3, 0.01)
@@ -579,7 +624,7 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
             try:
                 writer.add_figure(title, fig, step)
             except AttributeError:
-                self.logger.error("Could not use the given SummaryWriter to add the Rational figure")
+                self.logger.error("Could not use the given SummaryWriter to add the Rational figure", )
         elif display:
             plt.show()
         else:
@@ -687,7 +732,7 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
                                                color=color, label=inp_label)
                     else:
                         self.logger.warn(f"The bin size is too big, bins contain too few "
-                              "elements.\nbins: {x}")
+                              "elements.\nbins: {x}", )
                         fill = ax.bar([], []) # in case of remove needed
                     size = x[1] - x[0]
                 else:
@@ -934,7 +979,7 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
         """
 
         instances_list = cls.get_instance_list(input_fcts)
-        logger = ActivationLogger(f"{cls.__name__}Logger")
+        cls.logger._track_history(True)
         if axes is None:
             if layout == "auto":
                 total = len(instances_list)
@@ -948,7 +993,7 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
                 with sns.axes_style("whitegrid"):
                     fig, axes = plt.subplots(*layout, figsize=figs)
             except ImportError:
-                logger.warn("Could not import seaborn")
+                cls.logger.warn("Could not import seaborn")
                 #RationalImportSeabornWarning.warn()
                 fig, axes = plt.subplots(*layout, figsize=figs)
             if isinstance(axes, plt.Axes):
@@ -981,10 +1026,13 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
                 step = cls._step
                 cls._step += 1
             writer.add_figure(title, fig, step)
+            cls.logger._track_history(True)
         elif display:
             # plt.legend()
             plt.show()
+            cls.logger._track_history(True)
         else:
+            cls.logger._track_history(True)
             return fig
 
     # def __setattr__(self, key, value):
