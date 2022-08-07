@@ -1,5 +1,4 @@
 import logging 
-import os
 
 #https://alexandra-zaharia.github.io/posts/make-your-own-custom-color-formatter-with-python-logging/
 class ColoredFormatter(logging.Formatter):
@@ -10,8 +9,9 @@ class ColoredFormatter(logging.Formatter):
     bold_red = '\x1b[31;1m'
     white = '\x1b[38;5;231m'
 
-    def __init__(self, format):
-        logging.Formatter.__init__(self, format)
+    def __init__(self):
+        logging.Formatter.__init__(self)
+        format = "%(asctime)s - %(name)s - %(message)s (%(filename)s:%(lineno)d)"
         self.fmt = format
 
         self.FORMATS = {
@@ -31,62 +31,35 @@ class ColoredFormatter(logging.Formatter):
         return formatter.format(record)
 
 
-class ActivationLogger(object):
+class DuplicateFilter(object):
+    def __init__(self):
+        self.msgs = set()
 
-    def __init__(self, logger_name, log_level = logging.DEBUG, show_logger_name = True, show_time = False, file = "tst"):
-        self._logger = logging.getLogger(logger_name)
-        self._logger.setLevel(log_level)
+    def filter(self, record):
+        rv = record.msg not in self.msgs
+        self.msgs.add(record.msg)
+        return rv
+
+
+class ActivationLogger(logging.Logger):
+    def __init__(self, name):
+        logging.Logger.__init__(self, name, logging.DEBUG)
+
+        colored_format = ColoredFormatter()
         console = logging.StreamHandler()
-        console.setLevel(log_level)
-        self.logger_history = None
-        self.show_name = show_logger_name
-        self.show_time = show_time
+        console.setFormatter(colored_format)
+        self.addHandler(console)
+        self.filterDupl = DuplicateFilter()
+        self.tracking_history = False
+
+    def _track_history(self, want_track):
+        if want_track:
+            self.addFilter(self.filterDupl)
+        else: 
+            self.removeFilter(self.filterDupl)
+    
 
 
-        messageFormat = self.setFormatter(show_logger_name, show_time)
-        if os.name != 'nt':
-            console.setFormatter(ColoredFormatter(messageFormat))
-        if os.name == 'nt':
-            console.setFormatter(messageFormat)
-
-        if not self._logger.hasHandlers():
-            self._logger.addHandler(console)
 
 
-    def debug(self, msg):
-        func = self._logger.debug
-        self.log_multiple(msg, func)
-
-    def warn(self, msg):
-        func = self._logger.warn
-        self.log_multiple(msg, func)
-
-    def info(self, msg):
-        func = self._logger.info
-        self.log_multiple(msg, func)
-
-    def error(self, msg):
-        func = self._logger.error
-        self.log_multiple(msg, func)
-
-    def critical(self, msg):
-        func = self._logger.critical
-        self.log_multiple(msg, func)
-
-    def getFormatter(self, filename_set):
-        format = ''
-
-        if self.show_name:
-            format = '%(name)s'
-
-        if self.show_time:
-            if len(format) > 0:
-                format = format + ' | '
-            
-            format = format + '%(asctime)s'
-
-        if len(format) > 0:
-            format = format + ' | '
-
-        format = format + '%(filename)s | %(lineno)d | %(message)s'
-        return format
+logging.setLoggerClass(ActivationLogger)
