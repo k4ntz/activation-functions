@@ -8,15 +8,86 @@ import numpy as np
 from termcolor import colored
 from random import randint
 import activations.torch.utils.af_utils as af_utils
-from activations.torch.utils.af_utils import create_colors, get_toplevel_functions
-import logging
 
 _LINED = dict()
 
+def get_toplevel_functions(network):
+        dict_afs = _get_activations(network)
+        functions = []
+        all_keys = []
+        for key in dict_afs:
+            if "." not in key:
+                all_keys.append(key)
+        for top_key in all_keys:
+            curr_obj = dict_afs[top_key]
+            if type(curr_obj) is not list:
+                functions.append(curr_obj)
+            else:
+                functions.extend(curr_obj)
+        return functions
+
+# TODO: there should be a way of isinstance(object, Container) instead,
+#       but I couldn't find it.
+def is_hierarchical(object):
+    container_list = [torch.nn.modules.container.ModuleDict,
+                    torch.nn.modules.container.ModuleList,
+                    torch.nn.modules.container.Sequential,
+                    torch.nn.modules.container.ParameterDict,
+                    torch.nn.modules.container.ParameterList]
+
+    for class_type in container_list:
+        if isinstance(object, class_type):
+            return True
+    return False
+
+
+def _get_activations(network):
+    """
+    Retrieves a dictionary of all ActivationModule AFs present in the network
+
+    Arguments: 
+        network (torch.nn.Module):
+            The network from which to retrieve all the ActivationModule AFs
+    Returns:
+        af_dict (dictionary):
+            A dictionary containing as keys the names of the layer
+            and as value a list of all AFs contained in the specific layer / object.\n 
+            Duplicates will be in the dictionary, as hierarchical AFs are contained 
+            in both the top-level hierarchy and lower-level hierarchies
+    """
+    found_instances = {}
+    for name, object in network.named_children():
+        if isinstance(object, ActivationModule):
+            found_instances[name] = object
+        elif (object):
+            found_instances[name] = _process_recursive(
+                found_instances, name, object)
+    return found_instances
+
+
+def _process_recursive(original_dict, recName, recObject):
+    af_list = []
+    for name, object in recObject.named_children():
+        if isinstance(object, ActivationModule):
+            af_list.append(object)
+        elif is_hierarchical(object):
+            wholeName = recName + "." + name
+            original_dict[wholeName] = _process_recursive(
+                original_dict, name, object)
+            af_list.extend(original_dict[wholeName])
+    return af_list
+
+def create_colors(n):
+    colors = []
+    for i in range(n):
+        colors.append('#%06X' % randint(0, 0xFFFFFF))
+    return colors
+
+
 def _save_inputs(self, input, output):
-    if self.current_inp_distribution is None:
+    if self._selected_distribution is None:
         raise ValueError("Selected distribution is none")
-    self.current_inp_distribution.fill_n(input[0])
+    self._selected_distribution.fill_n(input[0])
 
 
 def _save_gradients(self, in_grad, out_grad):
@@ -26,9 +97,9 @@ def _save_gradients(self, in_grad, out_grad):
 
 def _save_inputs_auto_stop(self, input, output):
     self.inputs_saved += 1
-    if self.current_inp_distribution is None:
+    if self._selected_distribution is None:
         raise ValueError("Selected distribution is none")
-    self.current_inp_distribution.fill_n(input[0])
+    self._selected_distribution.fill_n(input[0])
     if self.inputs_saved > self._max_saves:
         self.training_mode()
 
@@ -49,14 +120,14 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
     instances = {}
     histograms_colors = ["red", "green", "black"]
     distribution_display_mode = "kde"
-    logger = logging.getLogger("ActivationModule")
-    
+    logger = ActivationLogger("Generic ActivationModule Logger")
 
     def __init__(self, function, device=None):
         if isinstance(function, str):
             self.type = function
             function = None
         super().__init__()
+        self.logger = ActivationLogger(f"ActivationLogger: {function}")
         if self.classname not in self.instances:
             self.instances[self.classname] = []
         self.instances[self.classname].append(self)
@@ -66,76 +137,15 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
                 self.forward = self.activation_function.__forward__
             else:
                 self.forward = self.activation_function
-
-        """ self._handle_inputs = None
+        self._handle_inputs = None
         self._handle_grads = None
         self._saving_input = False
         self.distributions = []
-        self.categories = ["distribution"]
-        self._selected_distribution = None
-        self._selected_distribution_name = "distribution" """
-
-        self._init_inp_distributions()
-        self._init_grad_distributions()
-
         if device is None:
             self.device = "cuda" if torch.cuda.is_available() else "cpu"
         else:
             self.device = device
         self.use_kde = True
-
-    def _init_grad_distributions(self):
-        self._handle_grads = None
-        self._in_grad_dist = None
-        self._out_grad_dist = None
-        self._grad_bin_width = "auto"
-        self._can_show_grad = False
-
-
-    def _init_inp_distributions(self):
-        self.categories = ["distribution"]
-        self.distributions = None
-        self._saving_input = False
-        self.mode = "categories"
-        self._handle_inputs = None
-        self.inp_bin_width = "auto"
-        self.can_show_inp = False
-
-
-
-    """ @property
-    def mode(self):
-        return self.mode 
-
-    @mode.setter
-    def mode(self, value):
-        value = str(value)
-        if value == self.mode:
-            self.logger.info("Mode is already in the specified one")
-            return
-        allowed_modes = ["categories"]
-        if value.lower() in allowed_modes: 
-            self.mode = value
-            from .utils.histograms_numpy import Histogram
-            self.histo_func = Histogram """
-
-    def get_mode_func(self, value, device):
-        value = str(value)
-        #allowed_modes = ["categories", "neurons", "neurons_categories"]
-        allowed_modes = ["categories"]
-        if value.lower() in allowed_modes: 
-            can_cupy = af_utils.can_use_cupy(device)
-            if can_cupy:
-                from activations.torch.utils.histograms_cupy import Histogram
-                histo_func = Histogram
-            else: 
-                from activations.torch.utils.histograms_numpy import Histogram
-                histo_func = Histogram 
-            return histo_func
-        else: 
-            self.logger.critical("Mode is currently not supported")
-            raise ValueError()
-
 
     @property
     def classname(self):
@@ -146,18 +156,13 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
             return "Unknown"  # TODO, implement
 
     def save_inputs(self, saving=True, auto_stop=False, max_saves=1000,
-                    bin_width=0.1, mode="categories", category_name=None):
+                    bin_width=0.1, mode="all", category_name=None):
         """
         Will retrieve the distribution of the input in self.distribution. \n
         This will slow down the function, as it has to retrieve the input \
         dist.\n
 
         Arguments:
-                saving (bool):
-                    If True, inputs passing through the activation function 
-                    are saved for distribution visualisation. If set to false,
-                    the inputs are not retrieved anymore when data flows 
-                    through the activation function
                 auto_stop (bool):
                     If True, the retrieving will stop after `max_saves` \
                     calls to forward.\n
@@ -172,36 +177,52 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
                     Default ``0.1``
                 mode (str):
                     The mode for the input retrieve.\n
-                    Currently only ``categories`` is supported.
+                    Have to be one of ``all``, ``categories``, ...
+                    Default ``all``
                 category_name (str):
                     The name of the category
                     Default ``0``
         """
-        self.can_show_inp = True
-
         if not saving:
-            if self.can_show_inp:
-                self.logger.warn("Not retrieving input anymore")
-                self._handle_inputs.remove()
+            self.logger.warn("Not retrieving input anymore")
+            self._handle_inputs.remove()
             self._handle_inputs = None
             return
         if self._handle_inputs is not None:
             # print("Already in retrieve mode")
             return
+        if "cuda" in self.device:
+            if "neurons" in mode.lower():
+                from activations.torch.utils.histograms_cupy import NeuronsHistogram as Histogram
+            else:
+                from activations.torch.utils.histograms_cupy import Histogram
+        else:
+            if "neurons" in mode.lower():
+                from activations.torch.utils.histograms_numpy import NeuronsHistogram as Histogram
+            else:
+                from activations.torch.utils.histograms_numpy import Histogram
+        #TODO: should this be refactored, because currently 
+        #if category_name is not none but mode is all, name will just 
+        #be "distribution" -> unintuitive 
         
-        #get function that creates histogram
-        histo_func = self.get_mode_func(mode, self.device)
-        
-        inp_distr = histo_func(bin_width)
-        if category_name is not None:
-            self.categories = [category_name]
-        
-        self.distributions = [inp_distr]
-        
-
+        if "categor" in mode.lower():
+            if category_name is None:
+                self._selected_distribution_name = None
+                self.categories = []
+                self._selected_distribution = None
+                self.distributions = []
+            else:
+                self._selected_distribution_name = category_name
+                self.categories = [category_name]
+                self._selected_distribution = Histogram(bin_width)
+                self.distributions = [self._selected_distribution]
+        else:
+            self._selected_distribution_name = "distribution"
+            self.categories = ["distribution"]
+            self._selected_distribution = Histogram(bin_width)
+            self.distributions = [self._selected_distribution]
+        self._irm = mode  # input retrieval mode
         self._inp_bin_width = bin_width
-
-        
         if auto_stop:
             self.inputs_saved = 0
             self._handle_inputs = self.register_forward_hook(_save_inputs_auto_stop)
@@ -210,7 +231,7 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
             self._handle_inputs = self.register_forward_hook(_save_inputs)
 
     def save_gradients(self, saving=True, auto_stop=False, max_saves=1000,
-                       bin_width="auto", mode="categories"):
+                       bin_width="auto", mode="all"):
         """
         Will retrieve the distribution of the input in self.distribution. \n
         This will slow down the function, as it has to retrieve the input \
@@ -239,20 +260,22 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
                     Default ``0``
         """
         if not saving:
-            if self._can_show_grad:
-                self.logger.warn("Not retrieving gradients anymore")
-                self._handle_grads.remove()
+            self.logger.warn("Not retrieving gradients anymore")
+            self._handle_grads.remove()
             self._handle_grads = None
             return
         if self._handle_grads is not None:
             # print("Already in retrieve mode")
             return
-        
-        histo_func = self.get_mode_func(mode, self.device)
-        self._in_grad_dist = histo_func(bin_width)
-        self._out_grad_dist = histo_func(bin_width)
-        self._grad_bin_width = bin_width
+        if "cuda" in self.device:
+            from .utils.histograms_cupy import Histogram
+        else:
+            from .utils.histograms_numpy import Histogram
 
+        self._grm = mode  # gradient retrieval mode
+        self._in_grad_dist = Histogram(bin_width)
+        self._out_grad_dist = Histogram(bin_width)
+        self._grad_bin_width = bin_width
         if auto_stop:
             self.inputs_saved = 0
             raise NotImplementedError
@@ -261,26 +284,13 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
         else:
             self._handle_grads = self.register_full_backward_hook(_save_gradients)
 
-
-    @classmethod
-    def __track_history_multiple_classes(cls, input_fcts = None, want_track = True):
-        if input_fcts is None: 
-            cls.logger._track_history(want_track)
-        else:
-            all_classes = set()
-            for curr_cls in input_fcts: 
-                if curr_cls not in all_classes:
-                    curr_cls.logger._track_history(want_track)
-                    all_classes.add(curr_cls)
-
-    @classmethod
-    def load_state_dicts(cls, dicts, input_fcts = None, *args, **kwargs):
-        instances_list = cls.get_instance_list(input_fcts)
-        assert len(instances_list) == len(dicts), "Number of loaded instances must match number of entries in the dict"
-        cls.__track_history_multiple_classes(input_fcts, True)
-        for i, instance in enumerate(instances_list):
-            instance.load_state_dict(dicts[i], *args, **kwargs)
-        cls.__track_history_multiple_classes(input_fcts, False)
+    # def training_mode(self):
+    #     """
+    #     Stops retrieving the distribution of the input in `self.distribution`.
+    #     """
+    #     print("Training mode, no longer retrieving the input.")
+    #     self._handle_inputs.remove()
+    #     self._handle_inputs = None
 
 
     @classmethod
@@ -290,50 +300,23 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
         """
         instances_list = cls.get_instance_list(input_fcts)
         state_dicts = []
-        cls.__track_history_multiple_classes(input_fcts, True)
         for instance in instances_list:
             curr_dict = instance.state_dict(*args, **kwargs)
             state_dicts.append(curr_dict)
-        cls.__track_history_multiple_classes(input_fcts, False)
         return state_dicts
 
     @classmethod
     def save_all_inputs(cls, input_fcts = None, *args, **kwargs):
         """Saves input that the Activation Functions perceive when data flows through them.
 
-        Arguments:
-                input_fcts ((Union(List, Dict, torch.nn.Module))): 
-                    The Activation Functions for which the inputs shall be saved. Default ``None``, in 
-                    which case the inputs are saved for the calling class. 
-                saving (bool):
-                    If True, inputs passing through the activation function 
-                    are saved for distribution visualisation. If set to false,
-                    the inputs are not retrieved anymore when data flows 
-                    through the activation function
-                auto_stop (bool):
-                    If True, the retrieving will stop after `max_saves` \
-                    calls to forward.\n
-                    Else, use :meth:`torch.Rational.training_mode`.\n
-                    Default ``False``
-                max_saves (int):
-                    The range on which the curves of the functions are fitted \
-                    together.\n
-                    Default ``1000``
-                bin_width (float):
-                    Default bin width for the histogram.\n
-                    Default ``0.1``
-                mode (str):
-                    The mode for the input retrieve.\n
-                    Currently only ``categories`` is supported.
-                category_name (str):
-                    The name of the category
-                    Default ``0`` 
+        Args:
+            input_fcts ((Union(List, Dict, torch.nn.Module))): 
+                The Activation Functions for which the inputs shall be saved. Default ``None``, in 
+                which case the inputs are saved for the calling class. 
         """
         instances_list = cls.get_instance_list(input_fcts)
-        cls.__track_history_multiple_classes(input_fcts, True)
         for instance in instances_list:
             instance.save_inputs(*args, **kwargs)
-        cls.__track_history_multiple_classes(input_fcts, False)
 
     @classmethod
     def save_all_gradients(cls, input_fcts = None, *args, **kwargs):
@@ -342,33 +325,11 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
         Args:
             input_fcts ((Union(List, Dict, torch.nn.Module))): 
                 The Activation Functions for which the gradients shall be saved. Default ``None``, in 
-                which case the gradients are saved for the calling class.
-            auto_stop (bool):
-                    If True, the retrieving will stop after `max_saves` \
-                    calls to forward.\n
-                    Else, use :meth:`torch.Rational.training_mode`.\n
-                    Default ``False``
-                max_saves (int):
-                    The range on which the curves of the functions are fitted \
-                    together.\n
-                    Default ``1000``
-                bin_width (float):
-                    Default bin width for the histogram.\n
-                    Default ``0.1``
-                mode (str):
-                    The mode for the input retrieve.\n
-                    Have to be one of ``all``, ``categories``, ...
-                    Default ``all``
-                category_name (str):
-                    The mode for the input retrieve.\n
-                    Have to be one of ``all``, ``categories``, ...
-                    Default ``0``
+                which case the gradients are saved for the calling class. 
         """
         instances_list = cls.get_instance_list(input_fcts)
-        cls.__track_history_multiple_classes(input_fcts, True)
         for instance in instances_list:
             instance.save_gradients(*args, **kwargs)
-        cls.__track_history_multiple_classes(input_fcts, False)
 
     def __repr__(self):
         return f"{self.classname}"
@@ -382,9 +343,6 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
 
     def show_gradients(self, display=True, tolerance=0.001, title=None,
                        axis=None, writer=None, step=None, label=None, colors=None):
-        if not self._can_show_grad:
-            self.logger.error("Cannot show gradients of ActivationModule, since no inputs were saved")
-            return
         try:
             import scipy.stats as sts
             scipy_imported = True
@@ -418,7 +376,7 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
             else:
                 axis.bar(x, weights/weights.max(), width=x[1] - x[0],
                          linewidth=0, alpha=0.4, color=col, label=label)
-            #TODO: why is this here?
+            #TODO: ??? what is this doing here?
             #distribution.empty()
         if writer is not None:
             try:
@@ -485,8 +443,8 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
                     If None, incrementing itself.
                     Default ``None``
         """
+        logger = ActivationLogger("f{cls.__name__}Logger")
         instances_list = cls.get_instance_list(input_fcts)
-        cls.__track_history_multiple_classes(input_fcts, True)
         if axes is None:
             if layout == "auto":
                 total = len(instances_list)
@@ -500,7 +458,7 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
                 with sns.axes_style("whitegrid"):
                     fig, axes = plt.subplots(*layout, figsize=figs)
             except ImportError:
-                cls.logger.warn("Could not import seaborn")
+                logger.warn("Could not import seaborn")
                 #RationalImportSeabornWarning.warn()
                 fig, axes = plt.subplots(*layout, figsize=figs)
             if isinstance(axes, plt.Axes):
@@ -529,18 +487,13 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
         elif display:
             plt.legend()
             plt.show()
-            cls.__track_history_multiple_classes(input_fcts, False)
         else:
-            cls.__track_history_multiple_classes(input_fcts, False)
             return fig
 
     def show(self, x=None, fitted_function=True, other_func=None, display=True,
              tolerance=0.001, title=None, axis=None, writer=None, step=None, label=None,
              color=None):
         #Construct x axis
-        if not self.can_show_inp:
-            self.logger.error("Cannot show input distribution, since no inputs were saved for it")
-            return
         if x is None:
             x = torch.arange(-3., 3, 0.01)
         elif isinstance(x, tuple) and len(x) in (2, 3):
@@ -554,7 +507,10 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
         if self.distributions:
             if self.distribution_display_mode in ["kde", "bar"]:
                 ax2 = axis.twinx()
-                x = self.plot_distributions(ax2, color)
+                if "neurons" in self._irm:
+                    x = self.plot_layer_distributions(ax2)
+                else:
+                    x = self.plot_distributions(ax2, color)
             elif self.distribution_display_mode == "points":
                 x0, x_last, _ = self.get_distributions_range()
                 x_edges = torch.tensor([x0, x_last]).float()
@@ -597,41 +553,23 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
             inst.current_inp_category = value
 
     @property
-    def inp_bin_width(self):
-        return self.bin_width
-
-    @inp_bin_width.setter
-    def inp_bin_width(self, value):
-        try:
-            if "auto" not in value:
-                value = float(value)
-            self.bin_width = value
-        except ValueError:
-            self.logger.warn(f'''
-                Passed value is not convertable to number, 
-                staying with original value, which is {self.inp_bin_width}
-            ''')
-        
-
-    @property
-    def current_inp_distribution(self):
-        return self.distributions[-1]
-                
-    @property
     def current_inp_category(self):
-        return self.categories[-1]
+        return self._selected_distribution_name
 
     @current_inp_category.setter
     def current_inp_category(self, value):
-        value = str(value)
-        #TODO: do we want to prevent users from creating two different 
-        #distributions under the same name?
-        """ if value == self.current_inp_category:
-            return """
-        if af_utils.can_use_cupy(self.device):
-            from activations.torch.utils.histograms_cupy import Histogram
+        if value == self._selected_distribution_name:
+            return
+        if "cuda" in self.device:
+            if "neurons" in self._irm.lower():
+                from activations.torch.utils.histograms_cupy import NeuronsHistogram as Histogram
+            else:
+                from activations.torch.utils.histograms_cupy import Histogram
         else:
-            from activations.torch.utils.histograms_numpy import Histogram
+            if "neurons" in self._irm.lower():
+                from activations.torch.utils.histograms_numpy import NeuronsHistogram as Histogram
+            else:
+                from activations.torch.utils.histograms_numpy import Histogram
         #if the histogram is empty, it means that is was created at the same phase
         #that the current category is created, which means that no input was perceived
         #during this time -> redundant category
@@ -639,9 +577,10 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
             if self.distributions[i].is_empty:
                 del self.distributions[i]
                 del self.categories[i]
-        new_distribution = Histogram(self.inp_bin_width)
-        self.distributions.append(new_distribution)
+        self._selected_distribution = Histogram(self._inp_bin_width)
+        self.distributions.append(self._selected_distribution)
         self.categories.append(value)
+        self._selected_distribution_name = value
 
     def plot_distributions(self, ax, colors=None, bin_size=None):
         """
@@ -832,10 +771,11 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
                     instances_list.append(curr_instc)
                 elif type(curr_instc) is list: 
                     instances_list.extend(curr_instc)
+
         if needsModifying:
             new_list = []
             for inst in instances_list:
-                if not issubclass(type(inst), cls):
+                if type(inst) is not cls:
                     cls.logger.warn(f"Removed {inst} since it's not a Submodule of {cls} class")
                 else:
                     new_list.append(inst)
@@ -924,9 +864,8 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
                     If None, incrementing itself.
                     Default ``None``
         """
-
         instances_list = cls.get_instance_list(input_fcts)
-        cls.__track_history_multiple_classes(input_fcts, True)
+        logger = ActivationLogger(f"{cls.__name__}Logger")
         if axes is None:
             if layout == "auto":
                 total = len(instances_list)
@@ -940,7 +879,7 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
                 with sns.axes_style("whitegrid"):
                     fig, axes = plt.subplots(*layout, figsize=figs)
             except ImportError:
-                cls.logger.warn("Could not import seaborn")
+                logger.warn("Could not import seaborn")
                 #RationalImportSeabornWarning.warn()
                 fig, axes = plt.subplots(*layout, figsize=figs)
             if isinstance(axes, plt.Axes):
@@ -973,13 +912,10 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
                 step = cls._step
                 cls._step += 1
             writer.add_figure(title, fig, step)
-            cls.__track_history_multiple_classes(input_fcts, False)
         elif display:
             # plt.legend()
             plt.show()
-            cls.__track_history_multiple_classes(input_fcts, False)
         else:
-            cls.__track_history_multiple_classes(input_fcts, False)
             return fig
 
     # def __setattr__(self, key, value):
@@ -1001,12 +937,6 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
             self.logger.info(msg)
             self.distributions = created_distributions
             self.current_inp_category = _inp_category
-        if "in_grad_dist" in state_dict.keys():
-            _in_grad_dist = state_dict.pop("in_grad_dist")
-            _out_grad_dist = state_dict.pop("out_grad_dist")
-            created_grad_dist, msg = af_utils.create_histograms([_in_grad_dist, _out_grad_dist], self.device)
-            self._in_grad_dist = created_grad_dist[0]
-            self._out_grad_dist = created_grad_dist[1]
         super().load_state_dict(state_dict)
 
 
@@ -1014,26 +944,8 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
     def state_dict(self, destination=None, *args, **kwargs):
         _state_dict = super().state_dict(destination, *args, **kwargs)
         if self.distributions is not None:
-            saved_distributions = []
-            saved_categories = []
-            for i in range(len(self.distributions)):
-                if self.distributions[i].is_empty:
-                    self.logger.warn("""Deleting input distribution histogram
-                                    since it is empty, at position: """  + i)
-                else: 
-                    saved_distributions.append(self.distributions[i])
-                    saved_categories.append(self.categories[i])
-
-            _state_dict["distributions"] = saved_distributions
-            _state_dict["inp_category"] = self.categories
-
-        if self._in_grad_dist is not None:
-            if self._in_grad_dist.is_empty:
-                self.logger.warn("""deleting input and output gradient distribution since it is empty,
-                    at position: """ + i)
-            else: 
-                _state_dict["in_grad_dist"] = self._in_grad_dist
-                _state_dict["out_grad_dist"] = self._out_grad_dist
+            _state_dict["distributions"] = self.distributions
+            _state_dict["inp_category"] = self.current_inp_category
         return _state_dict
 
 

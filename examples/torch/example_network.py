@@ -7,9 +7,7 @@ import torch.nn as nn
 from activations.torch import ReLU, LReLU
 from torch import optim
 import torch
-from activations.torch.functions_new import ActivationModule
-
-from activations.utils.activation_logger import ActivationLogger
+from activations.torch.functions import ActivationModule
 
 
 class MnistCNN(nn.Module):

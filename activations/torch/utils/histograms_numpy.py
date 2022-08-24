@@ -154,7 +154,8 @@ class NeuronsHistogram():
             if self.nb_neurons != "auto":
                 msg = f"It seems that the layer currently has {n_neurs} neurons.\n"
                 msg += "Automatically changing."
-                print(colored(msg, "yellow"))
+                #print(colored(msg, "yellow"))
+                print(msg)
             self.nb_neurons = n_neurs
             self.__bins = [np.array([]) for _ in range(n_neurs)]
             self.__weights = [np.array([], dtype=np.uint32) for _ in range(n_neurs)]
