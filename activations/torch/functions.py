@@ -122,15 +122,25 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
     def get_mode_func(self, value, device):
         value = str(value)
         #allowed_modes = ["categories", "neurons", "neurons_categories"]
-        allowed_modes = ["categories"]
+        allowed_modes = ["categories", "neurons", "neurons_categories"]
         if value.lower() in allowed_modes: 
             can_cupy = af_utils.can_use_cupy(device)
             if can_cupy:
-                from activations.torch.utils.histograms_cupy import Histogram
-                histo_func = Histogram
+                if "neurons" in value:
+                    from activations.torch.utils.histograms_cupy import NeuronsHistogram as hist   
+                    self.plotting_func = self.plot_layer_distributions
+                else: 
+                    from activations.torch.utils.histograms_cupy import Histogram as hist
+                    self.plotting_func = self.plot_distributions
+                histo_func = hist
             else: 
-                from activations.torch.utils.histograms_numpy import Histogram
-                histo_func = Histogram 
+                if "neurons" in value: 
+                    from activations.torch.utils.histograms_numpy import NeuronsHistogram as hist
+                    self.plotting_func = self.plot_layer_distributions
+                else:
+                    from activations.torch.utils.histograms_numpy import Histogram as hist
+                    self.plotting_func = self.plot_distributions
+                histo_func = hist
             return histo_func
         else: 
             self.logger.critical("Mode is currently not supported")
@@ -190,9 +200,9 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
             return
         
         #get function that creates histogram
-        histo_func = self.get_mode_func(mode, self.device)
+        self.histo_func = self.get_mode_func(mode, self.device)
         
-        inp_distr = histo_func(bin_width)
+        inp_distr = self.histo_func(bin_width)
         if category_name is not None:
             self.categories = [category_name]
         
@@ -534,19 +544,29 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
             cls.__track_history_multiple_classes(input_fcts, False)
             return fig
 
-    def show(self, x=None, fitted_function=True, other_func=None, display=True,
-             tolerance=0.001, title=None, axis=None, writer=None, step=None, label=None,
-             color=None):
-        #Construct x axis
-        if not self.can_show_inp:
-            self.logger.error("Cannot show input distribution, since no inputs were saved for it")
-            return
+
+
+    def give_axis(self, x = None):
         if x is None:
             x = torch.arange(-3., 3, 0.01)
         elif isinstance(x, tuple) and len(x) in (2, 3):
             x = torch.arange(*x).float()
         elif isinstance(x, torch.Tensor) or isinstance(x, np.ndarray):
             x = torch.tensor(x.float())
+
+    def show(self, x=None, fitted_function=True, other_func=None, display=True,
+             tolerance=0.001, title=None, axis=None, writer=None, step=None, label=None,
+             color=None):
+
+        #Construct x axis
+        if not self.can_show_inp:
+            self.logger.error("Cannot show input distribution, since no inputs were saved for it")
+            return
+
+        #create axis range depending on input x
+        x = self.give_axis(x)
+
+
         if axis is None:
             with sns.axes_style("whitegrid"):
                 # fig, axis = plt.subplots(1, 1, figsize=(8, 6))
@@ -554,13 +574,14 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
         if self.distributions:
             if self.distribution_display_mode in ["kde", "bar"]:
                 ax2 = axis.twinx()
-                x = self.plot_distributions(ax2, color)
+                x = self.plotting_func(ax2)
             elif self.distribution_display_mode == "points":
                 x0, x_last, _ = self.get_distributions_range()
                 x_edges = torch.tensor([x0, x_last]).float()
                 y_edges = self.forward(x_edges.to(self.device)).detach().cpu().numpy()
                 axis.scatter(x_edges, y_edges, color=color)
-        #TODO: this should enable showing without input data from before
+
+
         y = self.forward(x.to(self.device)).detach().cpu().numpy()
         if label:
             # axis.twinx().plot(x, y, label=label, color=color)
@@ -628,10 +649,6 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
         #distributions under the same name?
         """ if value == self.current_inp_category:
             return """
-        if af_utils.can_use_cupy(self.device):
-            from activations.torch.utils.histograms_cupy import Histogram
-        else:
-            from activations.torch.utils.histograms_numpy import Histogram
         #if the histogram is empty, it means that is was created at the same phase
         #that the current category is created, which means that no input was perceived
         #during this time -> redundant category
@@ -639,7 +656,7 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
             if self.distributions[i].is_empty:
                 del self.distributions[i]
                 del self.categories[i]
-        new_distribution = Histogram(self.inp_bin_width)
+        new_distribution = self.histo_func(self.inp_bin_width)
         self.distributions.append(new_distribution)
         self.categories.append(value)
 
@@ -654,6 +671,8 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
         except ImportError:
             RationalImportScipyWarning.warn()
             scipy_imported = False
+
+        
         dists_fb = []
         x_min, x_max = np.inf, -np.inf
         #TODO: this is obsolete afaik
@@ -662,12 +681,15 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
         if not(isinstance(colors, list) or isinstance(colors, tuple)):
             colors = create_colors(len(self.distributions))
         for i, (distribution, inp_label, color) in enumerate(zip(self.distributions, self.categories, colors)):
+
+            #if distribution is empty, fill it with empty stuff
             if distribution.is_empty:
                 if self.distribution_display_mode == "kde" and scipy_imported:
                     fill = ax.fill_between([], [], label=inp_label,  alpha=0.)
                 else:
                     fill = ax.bar([], [], label=inp_label,  alpha=0.)
                 dists_fb.append(fill)
+            #fill it with values
             else:
                 weights, x = _cleared_arrays(distribution.weights, distribution.bins, 0.001)
                 # weights, x = distribution.weights, distribution.bins
@@ -741,7 +763,8 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
         except ImportError:
             RationalImportScipyWarning.warn()
         dists_fb = []
-        for distribution, inp_label, color in zip(self.distributions, self.categories, self.histograms_colors):
+        colors = create_colors(len(self.distributions))
+        for distribution, inp_label, color in zip(self.distributions, self.categories, colors):
             #TODO: why is there no empty distribution check here?
             for n, (weights, x) in enumerate(zip(distribution.weights, distribution.bins)):
                 if self.use_kde and scipy_imported:
@@ -1051,7 +1074,6 @@ if __name__ == '__main__':
         gau = ActivationModule(gaussian, device=device)
         gau.save_inputs(mode=mode, category_name="neg") # Wrong
         inp = torch.stack([(torch.rand(10000)-(i+1))*2 for i in range(nb_neurons_in_layer)], 1)
-        print(inp.shape)
         gau(inp.to(device))
         if "categories" in mode:
             gau.current_inp_category = "pos"
@@ -1060,8 +1082,8 @@ if __name__ == '__main__':
             # gau(inp.cuda())
         gau.show()
 
-    ActivationModule.distribution_display_mode = "bar"
+    ActivationModule.distribution_display_mode = "kde"
     # for device in ["cuda:0", "cpu"]:
     for device in ["cpu"]:
-        for mode in ["categories", "neurons", "neurons_categories"]:
+        for mode in ["neurons_categories"]:
             plot_gaussian(mode, device)
