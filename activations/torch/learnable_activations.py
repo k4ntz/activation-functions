@@ -15,14 +15,6 @@ def tent_activation(x, delta):
     return torch.clamp(delta - torch.abs(x), min=0)
 
 
-def bitent_activation(x, delta):
-    """
-    Functional implementation of BiTentActivation.
-    """
-    hdt = delta/2
-    return -tent_activation(x+hdt, hdt) + tent_activation(x-hdt, hdt)
-
-
 class TentActivation(ActivationModule):
     distribution_display_mode = "kde"
     list = []
@@ -155,6 +147,18 @@ class TentActivation(ActivationModule):
             return fig
 
 
+def bitent_activation(x, delta, epsilon):
+    """
+    Functional implementation of BiTentActivation.
+    """
+    hdt = delta/2
+    return tent_activation(x+hdt+epsilon, hdt) + tent_activation(x-hdt-epsilon, hdt)
+
+
 class BiTentActivation(TentActivation):
+    def __init__(self, delta: Union[torch.Tensor, float] = 2.0, lb=0.0, ub=500.0, learnable: bool = False):
+        super().__init__(delta, lb, ub, learnable)
+        self.epsilon = 0.1 / 2
+
     def forward(self, x: Tensor) -> Tensor:
-        return bitent_activation(x, self.delta)
+        return bitent_activation(x, self.delta, self.epsilon)
