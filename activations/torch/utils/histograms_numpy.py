@@ -38,6 +38,7 @@ class Histogram():
                         np.around(new_input.max() + self._bin_size / 2, self._rd)
             bins_array = np.arange(range_ext[0], range_ext[1] + self._bin_size,
                                    self._bin_size)
+            print(len(bins_array))
             weights, bins = np.histogram(new_input, bins_array)
         self.weights, self.bins = weights, bins[:-1]
         self._is_empty = False
@@ -107,6 +108,13 @@ class Histogram():
                                weights=self.weights)
         return kde.pdf
 
+
+    @property
+    def range(self):
+        x_min = float(self.bins[0])
+        x_max = float(self.bins[-1])
+        return np.arange(x_min, x_max, self._bin_size/100)
+
     @property
     def bin_size(self):
         return self._bin_size
@@ -155,7 +163,6 @@ class NeuronsHistogram():
                 msg = f"It seems that the layer currently has {n_neurs} neurons.\n"
                 msg += "Automatically changing."
                 #print(colored(msg, "yellow"))
-                print(msg)
             self.nb_neurons = n_neurs
             self.__bins = [np.array([]) for _ in range(n_neurs)]
             self.__weights = [np.array([], dtype=np.uint32) for _ in range(n_neurs)]

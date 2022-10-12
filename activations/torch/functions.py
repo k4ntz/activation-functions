@@ -1,3 +1,4 @@
+from multiprocessing.sharedctypes import Value
 import torch
 import torch.nn.functional as F
 from activations.utils.utils import _get_auto_axis_layout, _cleared_arrays
@@ -10,6 +11,9 @@ from random import randint
 import activations.torch.utils.af_utils as af_utils
 from activations.torch.utils.af_utils import create_colors, get_toplevel_functions
 import logging
+import plotly.express as px
+import plotly.graph_objects as go
+import pandas as pd
 
 _LINED = dict()
 
@@ -75,6 +79,11 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
         self._selected_distribution = None
         self._selected_distribution_name = "distribution" """
 
+        self.vis_mode = "plotlib"
+        if self.vis_mode == "plotlib": 
+            self.show_method = self.show
+        elif self.vis_mode == "plotly": 
+            self.show_method = self.show_plotly
         self._init_inp_distributions()
         self._init_grad_distributions()
 
@@ -128,18 +137,30 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
             if can_cupy:
                 if "neurons" in value:
                     from activations.torch.utils.histograms_cupy import NeuronsHistogram as hist   
-                    self.plotting_func = self.plot_layer_distributions
+                    if self.vis_mode == "plotlib":
+                        self.plotting_func = self.plot_layer_distributions
+                    elif self.vis_mode == "plotly":
+                        raise NotImplementedError("Not implemented yet")
                 else: 
                     from activations.torch.utils.histograms_cupy import Histogram as hist
-                    self.plotting_func = self.plot_distributions
+                    if self.vis_mode == "plotlib":
+                        self.plotting_func = self.plot_distributions
+                    elif self.vis_mode == "plotly": 
+                        self.plotting_func = self.plot_distributions_plotly
                 histo_func = hist
             else: 
                 if "neurons" in value: 
                     from activations.torch.utils.histograms_numpy import NeuronsHistogram as hist
-                    self.plotting_func = self.plot_layer_distributions
+                    if self.vis_mode == "plotlib": 
+                        self.plotting_func = self.plot_layer_distributions
+                    else:
+                        raise NotImplementedError("Need to implement layer plotting in plotly")
                 else:
                     from activations.torch.utils.histograms_numpy import Histogram as hist
-                    self.plotting_func = self.plot_distributions
+                    if self.vis_mode == "plotlib":
+                        self.plotting_func = self.plot_distributions
+                    elif self.vis_mode == "plotly": 
+                        self.plotting_func = self.plot_distributions_plotly
                 histo_func = hist
             return histo_func
         else: 
@@ -414,7 +435,7 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
             labels = [f'{label} (inp)', f'{label} (outp)']
         for distribution, col, label in zip(dists, colors, labels):
             weights, x = distribution.weights, distribution.bins
-            if self.use_kde and scipy_imported:
+            if self.distribution_display_mode == "kde" and scipy_imported:
                 if len(x) > 5:
                     refined_bins = np.linspace(float(x[0]), float(x[-1]), 200)
                     kde_curv = distribution.kde()(refined_bins)
@@ -553,6 +574,41 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
             x = torch.arange(*x).float()
         elif isinstance(x, torch.Tensor) or isinstance(x, np.ndarray):
             x = torch.tensor(x.float())
+        return x
+
+
+    def show_plotly(self, x=None, fitted_function=True, other_func=None, display=True,
+             tolerance=0.001, title=None, fig=None, writer=None, step=None, label=None,
+             color=None):
+
+        #Construct x axis
+        if not self.can_show_inp:
+            self.logger.error("Cannot show input distribution, since no inputs were saved for it")
+            return
+
+        #create axis range depending on input x
+        x = self.give_axis(x)
+
+        if fig is None:
+            fig = go.Figure()
+        if self.distributions:
+            if self.distribution_display_mode in ["kde", "bar"]:
+                x = self.plotting_func(fig)
+            elif self.distribution_display_mode == "points":
+                #TODO: IMPLEMENT
+                raise NotImplementedError("need to implement")
+
+
+        y = self.forward(x.to(self.device)).detach().cpu().numpy()
+        if label:
+            fig.add_trace(go.Scatter(x = x, y = y, mode="lines"))
+        if writer is not None:
+            try:
+                writer.add_figure(title, fig, step)
+            except AttributeError:
+                self.logger.error("Could not use the given SummaryWriter to add the Rational figure")
+        elif display:
+            fig.show()
 
     def show(self, x=None, fitted_function=True, other_func=None, display=True,
              tolerance=0.001, title=None, axis=None, writer=None, step=None, label=None,
@@ -565,7 +621,6 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
 
         #create axis range depending on input x
         x = self.give_axis(x)
-
 
         if axis is None:
             with sns.axes_style("whitegrid"):
@@ -616,6 +671,11 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
         instances = cls.get_instance_list(input_fcts)
         for inst in instances:
             inst.current_inp_category = value
+
+
+    def set_display_mode(self, value):
+        assert value in ["kde", "bar", "points"], f"Display mode: {value} is not allowed"
+        self.distribution_display_mode = value
 
     @property
     def inp_bin_width(self):
@@ -680,8 +740,8 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
             colors = self.histograms_colors """
         if not(isinstance(colors, list) or isinstance(colors, tuple)):
             colors = create_colors(len(self.distributions))
-        for i, (distribution, inp_label, color) in enumerate(zip(self.distributions, self.categories, colors)):
 
+        for i, (distribution, inp_label, color) in enumerate(zip(self.distributions, self.categories, colors)):
             #if distribution is empty, fill it with empty stuff
             if distribution.is_empty:
                 if self.distribution_display_mode == "kde" and scipy_imported:
@@ -716,6 +776,7 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
                     size = (x[1] - x[0])/100 # bar size can be larger
                 dists_fb.append(fill)
                 x_min, x_max = min(x_min, x[0]), max(x_max, x[-1])
+
         if self.distribution_display_mode in ["kde", "bar"]:
             leg = ax.legend(fancybox=True, shadow=True)
             leg.get_frame().set_alpha(0.4)
@@ -752,6 +813,7 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
 
         return torch.arange(x_min, x_max, size)
 
+
     def plot_layer_distributions(self, ax):
         """
         Plot the layer distributions and returns the corresponding x
@@ -767,7 +829,7 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
         for distribution, inp_label, color in zip(self.distributions, self.categories, colors):
             #TODO: why is there no empty distribution check here?
             for n, (weights, x) in enumerate(zip(distribution.weights, distribution.bins)):
-                if self.use_kde and scipy_imported:
+                if self.distribution_display_mode == "kde" and scipy_imported:
                     if len(x) > 5:
                         refined_bins = np.linspace(float(x[0]), float(x[-1]), 200)
                         kde_curv = distribution.kde(n)(refined_bins)
@@ -815,6 +877,106 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
                 fig.canvas.draw()
             fig.canvas.mpl_connect('pick_event', toggle_distribution)
         return torch.arange(*self.get_distributions_range())
+        
+
+    def plot_distributions_plotly(self, fig, colors=None): 
+        """
+        Plot the distribution and returns the corresponding x
+        """
+        try:
+            import scipy.stats as sts
+            scipy_imported = True
+        except ImportError:
+            RationalImportScipyWarning.warn()
+            scipy_imported = False
+
+        
+        x_min, x_max = np.inf, -np.inf
+        #TODO: this is obsolete afaik
+        """ if colors is None:
+            colors = self.histograms_colors """
+        if colors is None or not(isinstance(colors, list) or isinstance(colors, tuple)):
+            colors = create_colors(len(self.distributions))
+        
+        #dict of data where keys are names of the categories and items are tuples of (x_data, y_data)
+        plotting_data = dict()
+        for i, (distribution, inp_label, color) in enumerate(zip(self.distributions, self.categories, colors)):
+            if not distribution.is_empty:
+                weights, x = _cleared_arrays(distribution.weights, distribution.bins, 0.001)
+                # weights, x = distribution.weights, distribution.bins
+                if self.distribution_display_mode == "kde" and scipy_imported:
+                    if len(x) > 5:
+                        x_data = np.linspace(x[0], x[-1], 200)
+                        y_data = distribution.kde()(x_data)
+                    else:
+                        self.logger.warn(f"The bin size is too big, bins contain too few "
+                              "elements.\nbins: {x}")
+                else:
+                    width = (x[1] - x[0])/len(self.distributions)
+                    if len(x) == len(weights):
+                        x_data = x
+                        #x_data = x+i*width
+                        y_data = weights/weights.max()
+                plotting_data[inp_label] = (x_data, y_data)
+
+
+        #TODO: add horizontal slider
+        if self.distribution_display_mode == "kde":
+            for cat_name in plotting_data.keys():
+                fig.add_trace(go.Scatter(name=cat_name, x = plotting_data[cat_name][0], y = plotting_data[cat_name][1], mode="lines", fill="tozeroy"))
+        elif self.distribution_display_mode == "bar": 
+            for cat_name in plotting_data.keys():
+                fig.add_trace(go.Bar(name=cat_name, x = plotting_data[cat_name][0], y = plotting_data[cat_name][1]))
+
+
+        #TODO: when distribution is always empty, size wont be assigned and will throw an error
+        return torch.arange(*self.get_distributions_range())
+
+
+    def plot_layer_distributions_plotly(self, fig):
+        """
+        Plot the layer distributions and returns the corresponding x
+        """
+        try:
+            import scipy.stats as sts
+            scipy_imported = True
+        except ImportError:
+            RationalImportScipyWarning.warn()
+        colors = create_colors(len(self.distributions))
+        plotting_data = []
+        
+        for distribution, inp_label, color in zip(self.distributions, self.categories, colors):
+            #for all neurons in current distribution get plotting dict
+            plotting_data.append(self.__get_plotting_data(distribution, inp_label, color, per_neuron = True))
+
+        #plotting
+
+        return torch.arange(*self.get_distributions_range())
+
+
+    """ def __get_plotting_data(self, distribution, inp_label, color, per_neuron = False):
+        def get_data(x, weights, display_mode, category_num, n = None):
+            x_data = y_data = None
+            if display_mode == "kde":
+                if len(x) > 5: 
+                    refined_bins = np.linspace(float(x[0]), float(x[-1]), 200)
+                    if n is not None: 
+                        kde_curv = distribution.kde(n)(refined_bins)
+                    else: 
+                        kde_curv = distribution.kde(n)(refined_bins)
+            else: 
+                
+
+                    
+
+        plotting_dict = dict()
+        if per_neuron:
+            for n, (weights, x) in enumerate(zip(distribution.weights, distribution.bins)): """
+
+        
+
+
+
 
     def get_distributions_range(self):
         x_min, x_max = np.inf, -np.inf
@@ -892,6 +1054,11 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
                 return []
         return instances_list
     
+    @classmethod
+    def set_display_mode(cls, display_mode, input_fcts = None):
+        instances_list = cls.get_instance_list(input_fcts)
+        for instance in instances_list:
+            instance.set_display_mode(display_mode)
 
 
     @classmethod
@@ -979,12 +1146,12 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
             colors = [colors]*len(axes.flatten())
         if isinstance(x, list):
             for act, ax, x_act, color in zip(instances_list, axes.flatten(), x, colors):
-                act.show(x_act, fitted_function, other_func, False, tolerance,
+                act.show_method(x_act, fitted_function, other_func, False, tolerance,
                          title, axis=ax, writer=None, step=step,
                          color=color)
         else:
             for act, ax, color in zip(instances_list, axes.flatten(), colors):
-                act.show(x, fitted_function, other_func, False, tolerance,
+                act.show_method(x, fitted_function, other_func, False, tolerance,
                          title, axis=ax, writer=None, step=step,
                          color=color)
         if title is not None:
@@ -1080,10 +1247,10 @@ if __name__ == '__main__':
             inp = torch.stack([(torch.rand(10000)+(i+1))*2 for i in range(nb_neurons_in_layer)], 1)
             gau(inp.to(device))
             # gau(inp.cuda())
-        gau.show()
+        gau.show_method()
 
-    ActivationModule.distribution_display_mode = "kde"
+    ActivationModule.distribution_display_mode = "bar"
     # for device in ["cuda:0", "cpu"]:
     for device in ["cpu"]:
-        for mode in ["neurons_categories"]:
+        for mode in ["categories"]:
             plot_gaussian(mode, device)

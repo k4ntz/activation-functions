@@ -120,14 +120,12 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
     instances = {}
     histograms_colors = ["red", "green", "black"]
     distribution_display_mode = "kde"
-    logger = ActivationLogger("Generic ActivationModule Logger")
 
     def __init__(self, function, device=None):
         if isinstance(function, str):
             self.type = function
             function = None
         super().__init__()
-        self.logger = ActivationLogger(f"ActivationLogger: {function}")
         if self.classname not in self.instances:
             self.instances[self.classname] = []
         self.instances[self.classname].append(self)
@@ -184,7 +182,6 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
                     Default ``0``
         """
         if not saving:
-            self.logger.warn("Not retrieving input anymore")
             self._handle_inputs.remove()
             self._handle_inputs = None
             return
@@ -260,7 +257,6 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
                     Default ``0``
         """
         if not saving:
-            self.logger.warn("Not retrieving gradients anymore")
             self._handle_grads.remove()
             self._handle_grads = None
             return
@@ -370,8 +366,6 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
                     axis.fill_between(refined_bins, kde_curv, alpha=0.4,
                                       color=col, label=label)
                 else:
-                    self.logger.warn("The bin size is too big, bins contain too few "
-                                     f"elements.\nbins: {x}")
                     axis.bar([], []) # in case of remove needed
             else:
                 axis.bar(x, weights/weights.max(), width=x[1] - x[0],
@@ -382,7 +376,7 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
             try:
                 writer.add_figure(title, fig, step)
             except AttributeError:
-                self.logger.error("Could not use the given SummaryWriter to add the Rational figure")
+                pass
         elif display:
             plt.legend()
             plt.show()
@@ -528,7 +522,7 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
             try:
                 writer.add_figure(title, fig, step)
             except AttributeError:
-                self.logger.error("Could not use the given SummaryWriter to add the Rational figure")
+                pass
         elif display:
             plt.show()
         else:
@@ -618,8 +612,6 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
                         fill = ax.fill_between(refined_bins, kde_curv, alpha=0.45,
                                                color=color, label=inp_label)
                     else:
-                        self.logger.warn(f"The bin size is too big, bins contain too few "
-                              "elements.\nbins: {x}")
                         fill = ax.bar([], []) # in case of remove needed
                     size = x[1] - x[0]
                 else:
@@ -691,8 +683,6 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
                         fill = ax.fill_between(refined_bins, kde_curv, alpha=0.4,
                                                 color=color, label=f"{inp_label} ({n})")
                     else:
-                        self.logger.warn(f"The bin size is too big, bins contain too few "
-                              "elements.\nbins: {x}")
                         fill = ax.bar([], []) # in case of remove needed
                 else:
                     fill = ax.bar(x, weights/weights.max(), width=x[1] - x[0],
@@ -934,7 +924,6 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
             _distributions = state_dict.pop("distributions")
             _inp_category = state_dict.pop("inp_category")
             created_distributions, msg = af_utils.create_histograms(_distributions, self.device)
-            self.logger.info(msg)
             self.distributions = created_distributions
             self.current_inp_category = _inp_category
         super().load_state_dict(state_dict)
@@ -972,8 +961,8 @@ if __name__ == '__main__':
             # gau(inp.cuda())
         gau.show()
 
-    ActivationModule.distribution_display_mode = "bar"
+    ActivationModule.distribution_display_mode = "points"
     # for device in ["cuda:0", "cpu"]:
     for device in ["cpu"]:
-        for mode in ["categories", "neurons", "neurons_categories"]:
+        for mode in ["categories"]:
             plot_gaussian(mode, device)

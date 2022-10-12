@@ -21,3 +21,5 @@ venv
 .eggs/
 examples/pytorch/data/
 data
+
+activations/torch/wandb
