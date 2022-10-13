@@ -1,4 +1,5 @@
 from multiprocessing.sharedctypes import Value
+from sklearn import neural_network
 import torch
 import torch.nn.functional as F
 from activations.utils.utils import _get_auto_axis_layout, _cleared_arrays
@@ -140,7 +141,7 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
                     if self.vis_mode == "plotlib":
                         self.plotting_func = self.plot_layer_distributions
                     elif self.vis_mode == "plotly":
-                        raise NotImplementedError("Not implemented yet")
+                        self.plotting_func = self.plot_distributions_plotly
                 else: 
                     from activations.torch.utils.histograms_cupy import Histogram as hist
                     if self.vis_mode == "plotlib":
@@ -153,8 +154,8 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
                     from activations.torch.utils.histograms_numpy import NeuronsHistogram as hist
                     if self.vis_mode == "plotlib": 
                         self.plotting_func = self.plot_layer_distributions
-                    else:
-                        raise NotImplementedError("Need to implement layer plotting in plotly")
+                    elif self.vis_mode == "plotly":
+                        self.plotting_func = self.plot_distributions_plotly
                 else:
                     from activations.torch.utils.histograms_numpy import Histogram as hist
                     if self.vis_mode == "plotlib":
@@ -230,7 +231,7 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
         self.distributions = [inp_distr]
         
 
-        self._inp_bin_width = bin_width
+        self.inp_bin_width = bin_width
 
         
         if auto_stop:
@@ -684,7 +685,7 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
     @inp_bin_width.setter
     def inp_bin_width(self, value):
         try:
-            if "auto" not in value:
+            if "auto" != value:
                 value = float(value)
             self.bin_width = value
         except ValueError:
@@ -712,6 +713,7 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
         #if the histogram is empty, it means that is was created at the same phase
         #that the current category is created, which means that no input was perceived
         #during this time -> redundant category
+    
         for i in range(len(self.distributions)):
             if self.distributions[i].is_empty:
                 del self.distributions[i]
@@ -914,8 +916,7 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
                 else:
                     width = (x[1] - x[0])/len(self.distributions)
                     if len(x) == len(weights):
-                        x_data = x
-                        #x_data = x+i*width
+                        x_data = x+i*width
                         y_data = weights/weights.max()
                 plotting_data[inp_label] = (x_data, y_data)
 
@@ -943,35 +944,78 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
         except ImportError:
             RationalImportScipyWarning.warn()
         colors = create_colors(len(self.distributions))
-        plotting_data = []
+        plotting_data = dict()
         
         for distribution, inp_label, color in zip(self.distributions, self.categories, colors):
             #for all neurons in current distribution get plotting dict
-            plotting_data.append(self.__get_plotting_data(distribution, inp_label, color, per_neuron = True))
+            plotting_data[inp_label] = self.__get_plotting_data(distribution, per_neuron = True)
 
         #plotting
+        if self.distribution_display_mode == "kde":
+            for cat_name in plotting_data.keys():
+                layer_data = plotting_data[cat_name]
+                for i, (x_plot, y_plot) in enumerate(layer_data):
+                    label = f"{cat_name}: Neuron {i}"
+                    fig.add_trace(go.Scatter(name=label, x = x_plot, y = y_plot, mode="lines", fill="tozeroy"))
+        elif self.distribution_display_mode == "bar": 
+            for cat_name in plotting_data.keys():
+                layer_data = plotting_data[cat_name]
+                for i, (x_plot, y_plot) in enumerate(layer_data):
+                    label = f"{cat_name}: Neuron {i}"
+                    fig.add_trace(go.Bar(name=label, x = x_plot, y = y_plot))
 
         return torch.arange(*self.get_distributions_range())
 
 
-    """ def __get_plotting_data(self, distribution, inp_label, color, per_neuron = False):
-        def get_data(x, weights, display_mode, category_num, n = None):
+    def __get_plotting_data(self, distribution, per_neuron = False):
+        """
+        Takes a distribution and whether it has a single distribution per layer or a distribution per layer (per_neuron = True).
+        Returns an array of plotting data for each output distribution 
+        and the number of output distributions (for layer it should maximally be 1)
+        """
+        def get_data(x, weights, display_mode, n = None):
+            #x := bins, y := histogram function
             x_data = y_data = None
             if display_mode == "kde":
                 if len(x) > 5: 
-                    refined_bins = np.linspace(float(x[0]), float(x[-1]), 200)
+                    x_data = np.linspace(float(x[0]), float(x[-1]), 200)
                     if n is not None: 
-                        kde_curv = distribution.kde(n)(refined_bins)
+                        y_data = distribution.kde(n)(x_data)
                     else: 
-                        kde_curv = distribution.kde(n)(refined_bins)
+                        y_data = distribution.kde()(x_data)
+                else:
+                    self.logger.warn(f"The bin size is too big, bins contain too few "
+                              "elements.\nbins: {x}")
+            else:
+                #x is originally defined to be x + i * width for i'th category
+                #but this is omitted since it doesn't make much of a difference
+                x_data = x 
+                y_data = weights / weights.max()
+            
+            if x_data is not None and y_data is not None: 
+                return (x_data, y_data)
             else: 
+                return None
+
                 
 
-                    
-
-        plotting_dict = dict()
+        plotting_data = []
+        num_inputs = 0
         if per_neuron:
-            for n, (weights, x) in enumerate(zip(distribution.weights, distribution.bins)): """
+            for n, (weights, x) in enumerate(zip(distribution.weights, distribution.bins)):
+                curr_neuron_data = get_data(x, weights, self.distribution_display_mode, n)
+                if curr_neuron_data is not None: 
+                   plotting_data.append(curr_neuron_data)
+                   num_inputs += 1
+        else: 
+            weights, x = _cleared_arrays(distribution.weights, distribution.bins, 0.001)
+            plot_data = get_data(x, weights, self.distribution_display_mode)
+            if plot_data is not None: 
+                plotting_data.append(plot_data)
+                num_inputs += 1
+            
+        return plotting_data, num_inputs
+
 
         
 
@@ -1252,5 +1296,5 @@ if __name__ == '__main__':
     ActivationModule.distribution_display_mode = "bar"
     # for device in ["cuda:0", "cpu"]:
     for device in ["cpu"]:
-        for mode in ["categories"]:
+        for mode in ["neurons"]:
             plot_gaussian(mode, device)
