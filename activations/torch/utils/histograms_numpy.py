@@ -154,10 +154,17 @@ class NeuronsHistogram():
         self._fill_iplm = self._first_time_fill
 
     def fill_n(self, input):
-        self._fill_iplm(input.T.detach().numpy())
+        #if we assume in general data (Batches, Channels, H, W) 
+        #then number of neurons is in Channels (???)
+        #TODO: why transpose? 
+        #I think below is wrong because 
+        #I see no reason to transpose
+        #self._fill_iplm(input.T.detach().numpy())
+        self._fill_iplm(input.detach().numpy())
 
     def _first_time_fill(self, new_input):
-        n_neurs = new_input.shape[0]
+        #n_neurs = new_input.shape[0]
+        n_neurs = new_input.shape[1]
         if n_neurs != self.nb_neurons:
             if self.nb_neurons != "auto":
                 msg = f"It seems that the layer currently has {n_neurs} neurons.\n"
@@ -176,18 +183,41 @@ class NeuronsHistogram():
                         np.around(new_input.max() + self._bin_size / 2, self._rd)
             bins_array = np.arange(range_ext[0], range_ext[1] + self._bin_size,
                                    self._bin_size)
-        for n, neur_inp in enumerate(new_input):
+        #TODO: refactored by me, check if this is correct
+        """ for n, neur_inp in enumerate(new_input):
             range_ext = np.around(neur_inp.min() - self._bin_size / 2, self._rd), \
                         np.around(neur_inp.max() + self._bin_size / 2, self._rd)
             bins_array = np.arange(range_ext[0], range_ext[1] + self._bin_size,
                                    self._bin_size)
             weights, bins = np.histogram(neur_inp, bins_array)
-            self.__weights[n], self.__bins[n] = weights, bins[:-1]
+            self.__weights[n], self.__bins[n] = weights, bins[:-1] """
+        for i in range(new_input.shape[1]):
+                neur_inp = new_input[:, i, ...]
+                range_ext = np.around(neur_inp.min() - self._bin_size / 2, self._rd), \
+                        np.around(neur_inp.max() + self._bin_size / 2, self._rd)
+                bins_array = np.arange(range_ext[0], range_ext[1] + self._bin_size,
+                                   self._bin_size)
+                weights, bins = np.histogram(neur_inp, bins_array)
+                self.__weights[i], self.__bins[i] = weights, bins[:-1]
         self._is_empty = False
         self._fill_iplm = self._update_hist
 
     def _update_hist(self, new_input):
-        for n, (neur_inp, neur_b, neur_w) in enumerate(zip(new_input, self.__bins, self.__weights)):
+        assert new_input.shape[1] == self.nb_neurons, f"New input doesn't use same nr of neurons, old: {self.nb_neurons}, new: {new_input.shape[1]}"
+        for i in range(new_input.shape[1]):
+            neur_inp = new_input[:, i, ...]
+            neur_b = self.__bins[i]
+            neur_w = self.__weights[i]
+            range_ext = np.around(neur_inp.min() - self._bin_size / 2, self._rd), \
+                        np.around(neur_inp.max() + self._bin_size / 2, self._rd)
+            bins_array = np.arange(range_ext[0], range_ext[1] + self._bin_size,
+                                   self._bin_size)
+            weights, bins = np.histogram(new_input, bins_array)
+            self.__weights[i], self.__bins[i] = concat_hists(neur_w, neur_b,
+                                                             weights, bins[:-1],
+                                                             self._bin_size, self._rd)
+            
+        """ for n, (neur_inp, neur_b, neur_w) in enumerate(zip(new_input, self.__bins, self.__weights)):
             range_ext = np.around(new_input.min() - self._bin_size / 2, self._rd), \
                         np.around(new_input.max() + self._bin_size / 2, self._rd)
             bins_array = np.arange(range_ext[0], range_ext[1] + self._bin_size,
@@ -195,7 +225,7 @@ class NeuronsHistogram():
             weights, bins = np.histogram(new_input, bins_array)
             self.__weights[n], self.__bins[n] = concat_hists(neur_w, neur_b,
                                                              weights, bins[:-1],
-                                                             self._bin_size, self._rd)
+                                                             self._bin_size, self._rd) """
 
     def __repr__(self):
         if self.is_empty:
