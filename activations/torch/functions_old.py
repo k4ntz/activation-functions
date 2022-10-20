@@ -437,7 +437,6 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
                     If None, incrementing itself.
                     Default ``None``
         """
-        logger = ActivationLogger("f{cls.__name__}Logger")
         instances_list = cls.get_instance_list(input_fcts)
         if axes is None:
             if layout == "auto":
@@ -452,7 +451,6 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
                 with sns.axes_style("whitegrid"):
                     fig, axes = plt.subplots(*layout, figsize=figs)
             except ImportError:
-                logger.warn("Could not import seaborn")
                 #RationalImportSeabornWarning.warn()
                 fig, axes = plt.subplots(*layout, figsize=figs)
             if isinstance(axes, plt.Axes):
@@ -587,6 +585,8 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
         except ImportError:
             RationalImportScipyWarning.warn()
             scipy_imported = False
+
+        
         dists_fb = []
         x_min, x_max = np.inf, -np.inf
         #TODO: this is obsolete afaik
@@ -594,13 +594,16 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
             colors = self.histograms_colors """
         if not(isinstance(colors, list) or isinstance(colors, tuple)):
             colors = create_colors(len(self.distributions))
+
         for i, (distribution, inp_label, color) in enumerate(zip(self.distributions, self.categories, colors)):
+            #if distribution is empty, fill it with empty stuff
             if distribution.is_empty:
                 if self.distribution_display_mode == "kde" and scipy_imported:
                     fill = ax.fill_between([], [], label=inp_label,  alpha=0.)
                 else:
                     fill = ax.bar([], [], label=inp_label,  alpha=0.)
                 dists_fb.append(fill)
+            #fill it with values
             else:
                 weights, x = _cleared_arrays(distribution.weights, distribution.bins, 0.001)
                 # weights, x = distribution.weights, distribution.bins
@@ -612,6 +615,8 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
                         fill = ax.fill_between(refined_bins, kde_curv, alpha=0.45,
                                                color=color, label=inp_label)
                     else:
+                        self.logger.warn(f"The bin size is too big, bins contain too few "
+                              "elements.\nbins: {x}")
                         fill = ax.bar([], []) # in case of remove needed
                     size = x[1] - x[0]
                 else:
@@ -625,6 +630,7 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
                     size = (x[1] - x[0])/100 # bar size can be larger
                 dists_fb.append(fill)
                 x_min, x_max = min(x_min, x[0]), max(x_max, x[-1])
+
         if self.distribution_display_mode in ["kde", "bar"]:
             leg = ax.legend(fancybox=True, shadow=True)
             leg.get_frame().set_alpha(0.4)
@@ -661,6 +667,7 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
 
         return torch.arange(x_min, x_max, size)
 
+
     def plot_layer_distributions(self, ax):
         """
         Plot the layer distributions and returns the corresponding x
@@ -672,10 +679,11 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
         except ImportError:
             RationalImportScipyWarning.warn()
         dists_fb = []
-        for distribution, inp_label, color in zip(self.distributions, self.categories, self.histograms_colors):
+        colors = create_colors(len(self.distributions))
+        for distribution, inp_label, color in zip(self.distributions, self.categories, colors):
             #TODO: why is there no empty distribution check here?
             for n, (weights, x) in enumerate(zip(distribution.weights, distribution.bins)):
-                if self.use_kde and scipy_imported:
+                if self.distribution_display_mode == "kde" and scipy_imported:
                     if len(x) > 5:
                         refined_bins = np.linspace(float(x[0]), float(x[-1]), 200)
                         kde_curv = distribution.kde(n)(refined_bins)
@@ -683,6 +691,8 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
                         fill = ax.fill_between(refined_bins, kde_curv, alpha=0.4,
                                                 color=color, label=f"{inp_label} ({n})")
                     else:
+                        self.logger.warn(f"The bin size is too big, bins contain too few "
+                              "elements.\nbins: {x}")
                         fill = ax.bar([], []) # in case of remove needed
                 else:
                     fill = ax.bar(x, weights/weights.max(), width=x[1] - x[0],
@@ -855,7 +865,6 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
                     Default ``None``
         """
         instances_list = cls.get_instance_list(input_fcts)
-        logger = ActivationLogger(f"{cls.__name__}Logger")
         if axes is None:
             if layout == "auto":
                 total = len(instances_list)
@@ -869,7 +878,6 @@ class ActivationModule(torch.nn.Module):#, metaclass=Metaclass):
                 with sns.axes_style("whitegrid"):
                     fig, axes = plt.subplots(*layout, figsize=figs)
             except ImportError:
-                logger.warn("Could not import seaborn")
                 #RationalImportSeabornWarning.warn()
                 fig, axes = plt.subplots(*layout, figsize=figs)
             if isinstance(axes, plt.Axes):

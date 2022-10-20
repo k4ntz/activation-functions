@@ -23,7 +23,10 @@ _LINED = dict()
 def _save_inputs(self, input, output):
     if self.current_inp_distribution is None:
         raise ValueError("Selected distribution is none")
+    self.inputs_saved += 1
     self.current_inp_distribution.fill_n(input[0])
+    if self.inputs_saved > 0 and self.inputs_saved % self.update_interval_dist == 0:
+        self.save_histo()
 
 
 def _save_gradients(self, in_grad, out_grad):
@@ -32,12 +35,14 @@ def _save_gradients(self, in_grad, out_grad):
 
 
 def _save_inputs_auto_stop(self, input, output):
-    self.inputs_saved += 1
     if self.current_inp_distribution is None:
         raise ValueError("Selected distribution is none")
+
+    self.inputs_saved += 1
     self.current_inp_distribution.fill_n(input[0])
     if self.inputs_saved > self._max_saves:
         self.training_mode()
+
 
 
 class ActivationModule(torch.nn.Module):
@@ -80,6 +85,7 @@ class ActivationModule(torch.nn.Module):
         self._grad_bin_width = "auto"
         self._can_show_grad = False
         self.grad_mode = "layer"
+        self.update_interval_grad = 0
 
 
     def _init_inp_distributions(self):
@@ -90,6 +96,10 @@ class ActivationModule(torch.nn.Module):
         self._handle_inputs = None
         self.inp_bin_width = "auto"
         self.can_show_inp = False
+        self.update_interval_dist = 0
+        if self.update_interval_dist > 0: 
+            self.saved_histos = []
+            
 
 
 
@@ -130,7 +140,7 @@ class ActivationModule(torch.nn.Module):
             return "Unknown"  # TODO, implement
 
     def save_inputs(self, saving=True, auto_stop=False, max_saves=1000,
-                    bin_width=0.1, mode="layer", category_name=None):
+                    bin_width=0.1, mode="layer", category_name=None, save_interval = 0):
         """
         Will retrieve the distribution of the input in self.distribution. \n
         This will slow down the function, as it has to retrieve the input \
@@ -160,7 +170,13 @@ class ActivationModule(torch.nn.Module):
                 category_name (str):
                     The name of the category
                     Default ``0``
+                save_interval (int): 
+                    The interval for which input distributions is saved as data flow in.
+                    Useful when trying to track input distributions for a number of epochs
+                    Default ``0``
         """
+
+        self.save_interval_dist = int(save_interval)
         self.can_show_inp = True
 
         if not saving:
@@ -185,9 +201,8 @@ class ActivationModule(torch.nn.Module):
 
         self.inp_bin_width = bin_width
 
-        
+        self.inputs_saved = 0    
         if auto_stop:
-            self.inputs_saved = 0
             self._handle_inputs = self.register_forward_hook(_save_inputs_auto_stop)
             self._max_saves = max_saves
         else:
@@ -417,6 +432,7 @@ class ActivationModule(torch.nn.Module):
             if axis is None:
                 return fig
 
+
     @classmethod
     def show_all_gradients(cls, input_fcts = None, display=True, tolerance=0.001, title=None,
                            axes=None, layout="auto", writer=None, step=None,
@@ -519,6 +535,9 @@ class ActivationModule(torch.nn.Module):
             cls.__track_history_multiple_classes(input_fcts, False)
             return fig
 
+    def save_histo(self):
+        #TODO: implement, need to take care of different distributions due to categories and how to best save them
+        pass
 
 
     def give_axis(self, x = None):
@@ -563,6 +582,10 @@ class ActivationModule(torch.nn.Module):
         elif display:
             fig.show()
 
+    #TODO: 
+    #Even though this currently works, it doesn't make sense. 
+    #Ideally, one should be able to define all possible categories for incoming
+    #data at the start and then 
     def change_category(cls, value, input_fcts=None):
         """ Changes the input category of the ActivationFunctions passed
         in input_fcts / calling class depending on the parameters.

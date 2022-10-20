@@ -114,7 +114,6 @@ testLoader = DL(test_data, batch_size=64, shuffle=True)
 
 model = MnistCNN()
 
-num_epochs = 1
 ReLU.save_all_inputs(mode="neurons")
 train(1, model, trainLaoder)
 ReLU.show_all()
