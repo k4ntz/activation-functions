@@ -2,8 +2,9 @@ import torch
 if torch.cuda.is_available():
     try:
         import torch
-        from rational.cuda import *
+        from activations.torch.rationals.cuda import *
         class Rational_CUDA_A_F(torch.autograd.Function):
+
             @staticmethod
             def forward(ctx, input, weight_numerator, weight_denominator, training):
                 ctx.save_for_backward(input, weight_numerator, weight_denominator)
@@ -15,6 +16,8 @@ if torch.cuda.is_available():
                 x, w_numerator, w_denominator = ctx.saved_tensors
                 d_x, d_weight_numerator, d_weight_denominator = backward_A_5_4(grad_output, x, w_numerator, w_denominator)
                 return d_x, d_weight_numerator, d_weight_denominator, None
+
+
 
 
         class Rational_CUDA_B_F(torch.autograd.Function):

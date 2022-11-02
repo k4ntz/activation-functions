@@ -21,10 +21,12 @@ from ..functions import ActivationModule
 
 if torch_cuda_available():
     try:
-        from rational.torch.rational_cuda_functions import Rational_CUDA_A_F, \
+        from .rational_cuda_functions import Rational_CUDA_A_F, \
             Rational_CUDA_B_F, Rational_CUDA_C_F, Rational_CUDA_D_F
     except ImportError:
-        pass
+        print("Could not import rational_cuda_functions in activations module")
+        import ipdb; ipdb.set_trace()
+        exit(1)
 
 def _save_input(self, input, output):
     self._selected_distribution.fill_n(input[0])
