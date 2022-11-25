@@ -87,10 +87,11 @@ class ActivationModule(torch.nn.Module):
         self.grad_mode = "layer"
         self.update_interval_grad = 0
 
-
     def _init_inp_distributions(self):
-        self.categories = ["distribution"]
-        self.distributions = None
+        self.curr_cat_name = None
+        self.distributions = dict() 
+
+
         self._saving_input = False
         self.dist_mode = "layer"
         self._handle_inputs = None
@@ -100,6 +101,74 @@ class ActivationModule(torch.nn.Module):
         if self.update_interval_dist > 0: 
             self.saved_histos = []
             
+
+    def __add_category(self, name, histo):
+        """
+        Adds a distribution histo with a name to the input distributions if the category name is not already 
+        present in the distributions
+        """
+        for cat in self.distributions.keys():
+            if name == cat:
+                self.logger.warn(f"Will not add a category for {name}, since it is already present in the distributions")
+                return
+
+        self.distributions[name] = histo
+
+
+    @classmethod 
+    def print_categories(cls, input_fcts = None): 
+        instances = cls.get_instance_list(input_fcts)
+        for inst in instances:
+            inst.print_categories_single()
+
+    def print_categories_single(self): 
+        msg = f"Activation {self} has distributions: {self.distributions}"
+        print(msg)
+
+    @classmethod
+    def change_categories(cls, value, input_fcts = None):
+        value = str(value)
+        instances = cls.get_instance_list(input_fcts)
+        for inst in instances:
+            inst.change_category(value)
+
+    def change_category(self, value):
+        if not value in self.distributions.keys():
+            raise ValueError(f"No distribution under the name {value} exists, only {self.distributions.keys()} exist")
+        else:
+            self.curr_cat_name = value
+
+    def __get_current_distribution(self):
+        if self.curr_cat_name is None: 
+            return None
+        else:            
+            return self.distributions[self.curr_cat_name]
+
+    @classmethod 
+    def get_current_dist_cat(cls, value, input_fcts = None): 
+        value = str(value)
+        instances = cls.get_instance_list(input_fcts)
+
+        curr_dists = []
+        for inst in instances:
+            cat_dist_pair = inst.get_current_dist_cat()
+            curr_dists.append(cat_dist_pair)
+        
+        return curr_dists
+
+
+
+    def get_current_dist_cat(self):
+        return (self.curr_cat_name, self.__get_current_distribution())
+
+
+
+
+    #TODO Category stuff: 
+    #1. Want to register categories -> there is n distributions {"name": distribution}
+    #2. Want to have a current category -> need a value "self_curr_category"
+    #3. Want to set current_category -> just set the value of self_curr_category 
+
 
 
 
@@ -193,10 +262,10 @@ class ActivationModule(torch.nn.Module):
         self.histo_func = self.get_mode_func(mode, self.device, True)
         
         inp_distr = self.histo_func(bin_width)
-        if category_name is not None:
-            self.categories = [category_name]
+        if category_name is None: 
+            name = "default"
         
-        self.distributions = [inp_distr]
+        self.__add_category(name, inp_distr)
         
 
         self.inp_bin_width = bin_width
@@ -433,6 +502,68 @@ class ActivationModule(torch.nn.Module):
                 return fig
 
 
+    @classmethod 
+    def register_dataset(cls, dataset, is_overwrite = True, input_fcts = None, bin_width = "auto"):
+        """
+        Register a Dataset, either from a DataLoader object or a Dataset object of pytorch
+        This will set n output distribution (for n labels) which will be plotted when data flows through 
+        an ActivationModule. The current output distributions can either be overwritten fully (is_overwrite = True) 
+        or extended by the new distributions.
+        """
+
+        from torch.utils.data.dataloader import DataLoader
+        from torch.utils.data.dataset import Dataset
+        assert (isinstance(dataset, Dataset)) or (isinstance(dataset, DataLoader))
+
+        if isinstance(dataset, DataLoader):
+            dataset = dataset.dataset 
+        
+        dataset_labels = torch.unique(dataset.targets)
+        dataset_labels = dataset_labels.tolist()
+        dataset_labels = [str(cat) for cat in dataset_labels]
+
+        instance_list = cls.get_instance_list(input_fcts)
+        for instance in instance_list:
+            instance.register_dataset_test(dataset, is_overwrite, bin_width, is_for_input_dist = True)
+            #instance.register_dataset_test(dataset_labels, is_overwrite, bin_width, is_fo)
+
+    def register_dataset_test(self, dataset, is_overwrite, bin_width, is_for_input_dist = True):
+        dataset_labels = torch.unique(dataset.targets)
+        dataset_labels = dataset_labels.tolist()
+        dataset_labels = [str(cat) for cat in dataset_labels]
+
+        existing_labels = self.distributions.keys()
+        existing_labels = [str(cat_name) for cat_name in existing_labels]
+
+        hist_func = self.get_mode_func(self.dist_mode, self.device, is_for_input_dist)
+        for new_label in dataset_labels:
+            if new_label in existing_labels:
+                if is_overwrite:
+                    self.logger.info(f"Overwriting current distribution category {new_label} with new distribution")
+                    self.distributions[new_label] = hist_func(bin_width)
+                else: 
+                    self.logger.info(f"Leaving the distribution {new_label} as it currently is, since overwriting mode is off")
+            else: 
+                self.distributions[new_label] = hist_func(bin_width)
+
+
+    """ def register_dataset_test(self, new_labels, is_overwrite, bin_width, is_for_input_dist = True):
+        existing_labels = self.distributions.keys()
+        existing_labels = [str(cat_name) for cat_name in existing_labels]
+
+        hist_func = self.get_mode_func(self.dist_mode, self.device, is_for_input_dist)
+        for new_label in new_labels:
+            if new_label in existing_labels:
+                if is_overwrite:
+                    self.logger.info(f"Overwriting current distribution category {new_label} with new distribution")
+                    self.distributions[new_label] = hist_func(bin_width)
+                else: 
+                    self.logger.info(f"Leaving the distribution {new_label} as it currently is, since overwriting mode is off")
+            else: 
+                self.distributions[new_label] = hist_func(bin_width) """
+                    
+
+
     @classmethod
     def show_all_gradients(cls, input_fcts = None, display=True, tolerance=0.001, title=None,
                            axes=None, layout="auto", writer=None, step=None,
@@ -582,27 +713,6 @@ class ActivationModule(torch.nn.Module):
         elif display:
             fig.show()
 
-    #TODO: 
-    #Even though this currently works, it doesn't make sense. 
-    #Ideally, one should be able to define all possible categories for incoming
-    #data at the start and then 
-    def change_category(cls, value, input_fcts=None):
-        """ Changes the input category of the ActivationFunctions passed
-        in input_fcts / calling class depending on the parameters.
-        This will create a new distribution on new input when visualizing the respective 
-        Activation Functions.
-
-        Arguments:
-            value (String): The name of the new category for visualisation
-            input_fcts ((Union(List, Dict, torch.nn.Module))): The ActivationFunctions 
-            for which the category should be changed. Default ``None``, in which case 
-            the instances of the classes get assigned a new category.
-        """
-        value = str(value)
-        instances = cls.get_instance_list(input_fcts)
-        for inst in instances:
-            inst.current_inp_category = value
-
 
     def set_display_mode(self, value):
         assert value in ["kde", "bar", "points"], f"Display mode: {value} is not allowed"
@@ -625,7 +735,8 @@ class ActivationModule(torch.nn.Module):
             ''')
         
 
-    @property
+
+    """ @property
     def current_inp_distribution(self):
         return self.distributions[-1]
                 
@@ -636,10 +747,8 @@ class ActivationModule(torch.nn.Module):
     @current_inp_category.setter
     def current_inp_category(self, value):
         value = str(value)
-        #TODO: do we want to prevent users from creating two different 
-        #distributions under the same name?
-        """ if value == self.current_inp_category:
-            return """
+
+
         #if the histogram is empty, it means that is was created at the same phase
         #that the current category is created, which means that no input was perceived
         #during this time -> redundant category
@@ -650,7 +759,7 @@ class ActivationModule(torch.nn.Module):
                 del self.categories[i]
         new_distribution = self.histo_func(self.inp_bin_width)
         self.distributions.append(new_distribution)
-        self.categories.append(value)
+        self.categories.append(value) """
 
     def __is_dist_per_layer(self):
         per_layer = self.dist_mode == "layer"
@@ -673,7 +782,7 @@ class ActivationModule(torch.nn.Module):
         
         plotting_data = dict()
         is_per_layer = self.__is_dist_per_layer()
-        for i, (distribution, inp_label, color) in enumerate(zip(self.distributions, self.categories, colors)):
+        for i, (distribution, inp_label, color) in enumerate(zip(self.distributions.items(), self.distributions.keys(), colors)):
             if not distribution.is_empty:
                 curr_plot_data, num_dists = self.__get_plotting_data(distribution, per_neuron = not is_per_layer)
                 if curr_plot_data is not None: 
@@ -764,7 +873,7 @@ class ActivationModule(torch.nn.Module):
 
     def get_distributions_range(self):
         x_min, x_max = np.inf, -np.inf
-        for dist in self.distributions:
+        for dist in self.distributions.items():
             if not dist.is_empty:
                 x_min, x_max = min(x_min, dist.range[0]), max(x_max, dist.range[-1])
                 size = dist.range[1] - dist.range[0]
@@ -790,7 +899,7 @@ class ActivationModule(torch.nn.Module):
             needsModifying = False
             instances_list = cls._get_instances()
         elif isinstance(input_fcts, torch.nn.Module):
-            instances_list = get_toplevel_functions(input_fcts)
+            instances_list = get_toplevel_functions(input_fcts, cls)
         elif type(input_fcts) is  list:
             instances_list = input_fcts
         elif type(input_fcts) is dict:
@@ -895,21 +1004,23 @@ class ActivationModule(torch.nn.Module):
         if self.distributions is not None:
             saved_distributions = []
             saved_categories = []
-            for i in range(len(self.distributions)):
-                if self.distributions[i].is_empty:
-                    self.logger.warn("""Deleting input distribution histogram
-                                    since it is empty, at position: """  + i)
+            for cat_name in self.distributions:
+                curr_dist = self.distributions[cat_name]
+                if curr_dist.is_empty:
+                    self.logger.warn(f"Not saving distribution for category {cat_name}, since it is empty")
                 else: 
-                    saved_distributions.append(self.distributions[i])
-                    saved_categories.append(self.categories[i])
+                    saved_distributions.append(curr_dist)
+                    saved_categories.append(cat_name)
 
             _state_dict["distributions"] = saved_distributions
-            _state_dict["inp_category"] = self.categories
+            _state_dict["inp_category"] = saved_categories
 
+        #TODO: do for gradients
         if self._in_grad_dist is not None:
             if self._in_grad_dist.is_empty:
-                self.logger.warn("""deleting input and output gradient distribution since it is empty,
-                    at position: """ + i)
+                pass
+                #""" self.logger.warn("""deleting input and output gradient distribution since it is empty,
+                #   at position: """ + i) """
             else: 
                 _state_dict["in_grad_dist"] = self._in_grad_dist
                 _state_dict["out_grad_dist"] = self._out_grad_dist

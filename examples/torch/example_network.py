@@ -4,10 +4,10 @@ from torchvision.transforms import ToTensor
 from torch.utils.data import DataLoader as DL
 import torch.nn as nn
 # import torch.functional as F
-from activations.torch import ReLU, LReLU
+from activations.torch import ReLU
+from activations.torch import ActivationModule
 from torch import optim
 import torch
-from activations.torch.functions import ActivationModule
 
 
 class MnistCNN(nn.Module):
@@ -49,7 +49,6 @@ class MnistCNN(nn.Module):
         output = self.l3(x)
         return output
 
-
 def save_model(model, save_name):
     full_pth = f"./models/{save_name}"
     torch.save(model.state_dict(), full_pth)
@@ -68,6 +67,7 @@ def train(epochs, model, trainDataLoader):
     for epoch in range(epochs):
         epoch_loss = 0
         for (batch_image, batch_label) in trainDataLoader:
+            ActivationModule.change_categories(batch_label, input_fcts = model)
             output = model(batch_image)
             loss = lossf(output, batch_label)
             optimizer.zero_grad()
@@ -114,6 +114,8 @@ testLoader = DL(test_data, batch_size=64, shuffle=True)
 
 model = MnistCNN()
 
-ReLU.save_all_inputs(mode="neurons")
+ReLU.register_dataset(trainLaoder)
+ReLU.print_categories()
 train(1, model, trainLaoder)
+import ipdb; ipdb.set_trace()
 ReLU.show_all()

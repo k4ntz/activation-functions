@@ -48,8 +48,8 @@ def __create_single_hist(single_inp_histogram, histo_function):
     return created_histo
 
 
-def get_toplevel_functions(network):
-        dict_afs = _get_activations(network)
+def get_toplevel_functions(network, param_class):
+        dict_afs = _get_activations(network, param_class)
         functions = []
         all_keys = []
         for key in dict_afs:
