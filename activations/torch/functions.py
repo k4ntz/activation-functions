@@ -1,32 +1,51 @@
-from multiprocessing.sharedctypes import Value
-from attr import Attribute
-from sklearn import neural_network
 import torch
-import torch.nn.functional as F
 from activations.utils.utils import _get_auto_axis_layout, _cleared_arrays
 from activations.utils.warnings import RationalImportScipyWarning
 import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
-from termcolor import colored
-from random import randint
 import activations.torch.utils.af_utils as af_utils
 from activations.torch.utils.af_utils import create_colors, get_toplevel_functions
 import logging
-import plotly.express as px
 import plotly.graph_objects as go
-import pandas as pd
 from plotly.subplots import make_subplots
+from torch.utils.data.sampler import Sampler
+import random
 
 _LINED = dict()
 
+
+class CategorySampler(Sampler):
+    def __init__(self, dataset): 
+        self.len = len(dataset)
+        self.dataset_labels = torch.unique(dataset.targets)
+        self.label_per_data = dataset.targets
+        self.len_data_per_label = self.__init_len()
+        self.curr_num = 0
+
+    def __init_len(self): 
+        pass
+    
+    def __iter__(self): 
+        pass
+        
+
+
+    def __len__(self): 
+        return self.len
+
+
+
+
 def _save_inputs(self, input, output):
-    if self.current_inp_distribution is None:
+    curr_dist = self.get_current_distribution()
+    if curr_dist is None:
         raise ValueError("Selected distribution is none")
     self.inputs_saved += 1
-    self.current_inp_distribution.fill_n(input[0])
-    if self.inputs_saved > 0 and self.inputs_saved % self.update_interval_dist == 0:
-        self.save_histo()
+    curr_dist(input[0])
+    #TODO: dunno why I used this here.
+    """ if self.inputs_saved > 0 and self.inputs_saved % self.update_interval_dist == 0:
+        self.save_histo() """
 
 
 def _save_gradients(self, in_grad, out_grad):
@@ -138,15 +157,15 @@ class ActivationModule(torch.nn.Module):
         else:
             self.curr_cat_name = value
 
-    def __get_current_distribution(self):
+    def get_current_distribution(self):
         if self.curr_cat_name is None: 
             return None
         else:            
             return self.distributions[self.curr_cat_name]
 
+
     @classmethod 
-    def get_current_dist_cat(cls, value, input_fcts = None): 
-        value = str(value)
+    def get_current_dist_cat(cls, input_fcts = None): 
         instances = cls.get_instance_list(input_fcts)
 
         curr_dists = []
@@ -159,7 +178,7 @@ class ActivationModule(torch.nn.Module):
 
 
     def get_current_dist_cat(self):
-        return (self.curr_cat_name, self.__get_current_distribution())
+        return (self.curr_cat_name, self.get_current_distribution())
 
 
 
@@ -264,6 +283,7 @@ class ActivationModule(torch.nn.Module):
         inp_distr = self.histo_func(bin_width)
         if category_name is None: 
             name = "default"
+            self.curr_cat_name = name
         
         self.__add_category(name, inp_distr)
         
@@ -331,15 +351,12 @@ class ActivationModule(torch.nn.Module):
 
 
     @classmethod
-    def __track_history_multiple_classes(cls, input_fcts = None, want_track = True):
-        if input_fcts is None: 
-            cls.logger._track_history(want_track)
-        else:
-            all_classes = set()
-            for curr_cls in input_fcts: 
-                if curr_cls not in all_classes:
-                    curr_cls.logger._track_history(want_track)
-                    all_classes.add(curr_cls)
+    def __track_history_multiple_classes(cls, instances_list = None, want_track = True):
+        all_classes = set()
+        for curr_cls in instances_list: 
+            if curr_cls not in all_classes:
+                curr_cls.logger._track_history(want_track)
+                all_classes.add(curr_cls)
 
     @classmethod
     def load_state_dicts(cls, dicts, input_fcts = None, *args, **kwargs):
@@ -398,10 +415,10 @@ class ActivationModule(torch.nn.Module):
                     Default ``0`` 
         """
         instances_list = cls.get_instance_list(input_fcts)
-        cls.__track_history_multiple_classes(input_fcts, True)
+        cls.__track_history_multiple_classes(instances_list, True)
         for instance in instances_list:
             instance.save_inputs(*args, **kwargs)
-        cls.__track_history_multiple_classes(input_fcts, False)
+        cls.__track_history_multiple_classes(instances_list, False)
 
     @classmethod
     def save_all_gradients(cls, input_fcts = None, *args, **kwargs):
@@ -1025,30 +1042,3 @@ class ActivationModule(torch.nn.Module):
                 _state_dict["in_grad_dist"] = self._in_grad_dist
                 _state_dict["out_grad_dist"] = self._out_grad_dist
         return _state_dict
-
-
-if __name__ == '__main__':
-    def plot_gaussian(mode, device):
-        _2pi_sqrt = 2.5066
-        tanh = torch.tanh
-        relu = F.relu
-
-        nb_neurons_in_layer = 5
-
-        leaky_relu = F.leaky_relu
-        gaussian = lambda x: torch.exp(-0.5*x**2) / _2pi_sqrt
-        gaussian.__name__ = "gaussian"
-        gau = ActivationModule(gaussian, device=device)
-        gau.save_inputs(mode=mode, category_name="neg") # Wrong
-        inp = torch.stack([(torch.rand((64,1000))-(i+1))*2 for i in range(nb_neurons_in_layer)], 1)
-        gau(inp.to(device))
-        gau.current_inp_category = "pos"
-        inp = torch.stack([(torch.rand(64,1000)+(i+1))*2 for i in range(nb_neurons_in_layer)], 1)
-        gau(inp.to(device))
-        gau.show_plotly()
-
-    ActivationModule.distribution_display_mode = "bar"
-    # for device in ["cuda:0", "cpu"]:
-    for device in ["cpu"]:
-        for mode in ["neurons"]:
-            plot_gaussian(mode, device)

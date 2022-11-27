@@ -67,7 +67,6 @@ def train(epochs, model, trainDataLoader):
     for epoch in range(epochs):
         epoch_loss = 0
         for (batch_image, batch_label) in trainDataLoader:
-            ActivationModule.change_categories(batch_label, input_fcts = model)
             output = model(batch_image)
             loss = lossf(output, batch_label)
             optimizer.zero_grad()
@@ -113,9 +112,10 @@ testLoader = DL(test_data, batch_size=64, shuffle=True)
 
 
 model = MnistCNN()
-
-ReLU.register_dataset(trainLaoder)
-ReLU.print_categories()
-train(1, model, trainLaoder)
 import ipdb; ipdb.set_trace()
+
+ReLU.save_all_inputs(model)
+#ReLU.register_dataset(trainLaoder)
+#ReLU.print_categories()
+train(1, model, trainLaoder)
 ReLU.show_all()
