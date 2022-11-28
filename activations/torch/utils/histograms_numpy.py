@@ -38,7 +38,6 @@ class Histogram():
                         np.around(new_input.max() + self._bin_size / 2, self._rd)
             bins_array = np.arange(range_ext[0], range_ext[1] + self._bin_size,
                                    self._bin_size)
-            print(len(bins_array))
             weights, bins = np.histogram(new_input, bins_array)
         self.weights, self.bins = weights, bins[:-1]
         self._is_empty = False

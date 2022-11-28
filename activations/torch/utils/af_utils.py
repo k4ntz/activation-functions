@@ -1,5 +1,59 @@
 import torch
 from random import randint
+from torch.utils.data.sampler import BatchSampler
+import random
+
+
+
+def get_current_label(batch_label): 
+    batch_label = batch_label.tolist()
+    set_label = set(batch_label)
+    assert len(set_label) == 1, "multiple entries in batch labels"
+    return batch_label[0]
+
+
+class CategorySampler(BatchSampler):
+    def __init__(self, dataset : torch.utils.data.Dataset, batch_size = 64, shuffle = False, drop_last = False): 
+        self.batch_size = batch_size
+        self.drop_last = drop_last
+        self.shuffle = shuffle
+        self.len = len(dataset)
+        self.unique_labels = torch.unique(dataset.targets).tolist()
+        self.labels_list = dataset.targets
+        self.indices_per_label = self.init_indices_per_label()
+
+    def get_current_label(self): 
+        return self.curr_label
+
+    def init_indices_per_label(self): 
+        indices_per_label = []
+        for label in self.unique_labels:
+            curr_index_list = (self.labels_list == label).nonzero().squeeze().tolist()
+            indices_per_label.append(curr_index_list)
+
+        return indices_per_label
+
+    
+    def __iter__(self): 
+        for label in self.unique_labels:
+            batch = [] 
+            curr_label_list = self.indices_per_label[label]
+            if self.shuffle:
+                random.shuffle(curr_label_list) 
+            for idx in curr_label_list:
+                batch.append(idx)
+                if len(batch) == self.batch_size: 
+                    yield batch 
+                    batch = []
+            if len(batch) > 0 and not self.drop_last:
+                yield batch        
+
+
+    def __len__(self): 
+        if self.drop_last:
+            return self.len // self.batch_size
+        else: 
+            return (self.len + self.batch_size - 1) // self.batch_size
 
 def can_use_cupy(device): 
     first_ok = "cuda" in device 

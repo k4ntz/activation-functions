@@ -9,40 +9,22 @@ from activations.torch.utils.af_utils import create_colors, get_toplevel_functio
 import logging
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-from torch.utils.data.sampler import Sampler
-import random
 
 _LINED = dict()
 
 
-class CategorySampler(Sampler):
-    def __init__(self, dataset): 
-        self.len = len(dataset)
-        self.dataset_labels = torch.unique(dataset.targets)
-        self.label_per_data = dataset.targets
-        self.len_data_per_label = self.__init_len()
-        self.curr_num = 0
-
-    def __init_len(self): 
-        pass
-    
-    def __iter__(self): 
-        pass
-        
-
-
-    def __len__(self): 
-        return self.len
-
-
-
+def change_categories(list_of_activations, value):
+    assert isinstance(list_of_activations, list), "To change categories, please pass a list of activations. You can retrieve them with ActivationModule.get_instances_list()"
+    for inst in list_of_activations:
+        assert isinstance(inst, ActivationModule), f"{inst} needs to be an ActivationModule activation function"
+        inst.change_category(value)
 
 def _save_inputs(self, input, output):
     curr_dist = self.get_current_distribution()
     if curr_dist is None:
         raise ValueError("Selected distribution is none")
     self.inputs_saved += 1
-    curr_dist(input[0])
+    curr_dist.fill_n(input[0])
     #TODO: dunno why I used this here.
     """ if self.inputs_saved > 0 and self.inputs_saved % self.update_interval_dist == 0:
         self.save_histo() """
@@ -54,15 +36,14 @@ def _save_gradients(self, in_grad, out_grad):
 
 
 def _save_inputs_auto_stop(self, input, output):
-    if self.current_inp_distribution is None:
+    curr_dist = self.get_current_distribution()
+    if curr_dist is None:
         raise ValueError("Selected distribution is none")
 
     self.inputs_saved += 1
-    self.current_inp_distribution.fill_n(input[0])
+    curr_dist.fill_n(input[0])
     if self.inputs_saved > self._max_saves:
         self.training_mode()
-
-
 
 class ActivationModule(torch.nn.Module):
     # histograms_colors = plt.get_cmap('Pastel1').colors
@@ -136,22 +117,25 @@ class ActivationModule(torch.nn.Module):
 
     @classmethod 
     def print_categories(cls, input_fcts = None): 
-        instances = cls.get_instance_list(input_fcts)
-        for inst in instances:
+        return_instances = cls.get_instance_list(input_fcts)
+        for inst in return_instances:
             inst.print_categories_single()
 
     def print_categories_single(self): 
         msg = f"Activation {self} has distributions: {self.distributions}"
         print(msg)
 
-    @classmethod
+
+    """ @classmethod
     def change_categories(cls, value, input_fcts = None):
         value = str(value)
-        instances = cls.get_instance_list(input_fcts)
-        for inst in instances:
-            inst.change_category(value)
+        #TODO: do we need to access this list every time?
+        return_instances = cls.get_instance_list(input_fcts)
+        for inst in return_instances:
+            inst.change_category(value) """
 
     def change_category(self, value):
+        value = str(value)
         if not value in self.distributions.keys():
             raise ValueError(f"No distribution under the name {value} exists, only {self.distributions.keys()} exist")
         else:
@@ -166,10 +150,10 @@ class ActivationModule(torch.nn.Module):
 
     @classmethod 
     def get_current_dist_cat(cls, input_fcts = None): 
-        instances = cls.get_instance_list(input_fcts)
+        return_instances = cls.get_instance_list(input_fcts)
 
         curr_dists = []
-        for inst in instances:
+        for inst in return_instances:
             cat_dist_pair = inst.get_current_dist_cat()
             curr_dists.append(cat_dist_pair)
         
@@ -520,20 +504,18 @@ class ActivationModule(torch.nn.Module):
 
 
     @classmethod 
-    def register_dataset(cls, dataset, is_overwrite = True, input_fcts = None, bin_width = "auto"):
+    def register_dataset(cls, dataset, is_overwrite = True, input_fcts = None, bin_width = "auto",
+                        batch_size = 64, shuffle = False, drop_last = False, num_workers = 1):
         """
-        Register a Dataset, either from a DataLoader object or a Dataset object of pytorch
+        Register a Dataset for a number of ActivationModule functions.
         This will set n output distribution (for n labels) which will be plotted when data flows through 
         an ActivationModule. The current output distributions can either be overwritten fully (is_overwrite = True) 
-        or extended by the new distributions.
+        or extended by the new distributions. Returns a new DataLoader object for the dataset that will iterate sequentially through
+        the unique labels of the dataset.
         """
 
-        from torch.utils.data.dataloader import DataLoader
         from torch.utils.data.dataset import Dataset
-        assert (isinstance(dataset, Dataset)) or (isinstance(dataset, DataLoader))
-
-        if isinstance(dataset, DataLoader):
-            dataset = dataset.dataset 
+        assert isinstance(dataset, Dataset), "Data needs to be a dataset"
         
         dataset_labels = torch.unique(dataset.targets)
         dataset_labels = dataset_labels.tolist()
@@ -543,8 +525,13 @@ class ActivationModule(torch.nn.Module):
         for instance in instance_list:
             instance.register_dataset_test(dataset, is_overwrite, bin_width, is_for_input_dist = True)
             #instance.register_dataset_test(dataset_labels, is_overwrite, bin_width, is_fo)
+    
+        from torch.utils.data import DataLoader
+        return DataLoader(dataset, batch_sampler=af_utils.CategorySampler(dataset, batch_size, shuffle, drop_last))
 
-    def register_dataset_test(self, dataset, is_overwrite, bin_width, is_for_input_dist = True):
+    #TODO: should this just set saving = True? 
+    def register_dataset_test(self, dataset, is_overwrite, bin_width, is_for_input_dist = True, auto_stop = False, max_saves = 10):
+        self.can_show_inp = True
         dataset_labels = torch.unique(dataset.targets)
         dataset_labels = dataset_labels.tolist()
         dataset_labels = [str(cat) for cat in dataset_labels]
@@ -562,6 +549,15 @@ class ActivationModule(torch.nn.Module):
                     self.logger.info(f"Leaving the distribution {new_label} as it currently is, since overwriting mode is off")
             else: 
                 self.distributions[new_label] = hist_func(bin_width)
+
+
+        #TODO: refactor the saving_inputs method such that this can just call it
+        self.inputs_saved = 0
+        if auto_stop:
+            self._handle_inputs = self.register_forward_hook(_save_inputs_auto_stop)
+            self._max_saves = max_saves
+        else:
+            self._handle_inputs = self.register_forward_hook(_save_inputs)
 
 
     """ def register_dataset_test(self, new_labels, is_overwrite, bin_width, is_for_input_dist = True):
@@ -702,11 +698,12 @@ class ActivationModule(torch.nn.Module):
         title=None, fig=None, writer=None, step=None,
         color=None, subplot_index = None):
 
+        #TODO: remove, testing purposes 
+        fig = None
         #Construct x axis
         if not self.can_show_inp:
             self.logger.error("Cannot show input distribution, since no inputs were saved for it")
             return
-
         #create axis range depending on input x
         x = self.give_axis(x)
         if fig is None:
@@ -718,7 +715,8 @@ class ActivationModule(torch.nn.Module):
                 #TODO: IMPLEMENT
                 raise NotImplementedError("need to implement")
 
-
+        #TODO: remove, testing purposes 
+        subplot_index = None
         y = self.forward(x.to(self.device)).detach().cpu().numpy()
         if subplot_index is not None: 
             fig.add_trace(go.Scatter(x = x, y = y, mode="lines"), row = subplot_index[0], col=subplot_index[1])
@@ -799,32 +797,33 @@ class ActivationModule(torch.nn.Module):
         
         plotting_data = dict()
         is_per_layer = self.__is_dist_per_layer()
-        for i, (distribution, inp_label, color) in enumerate(zip(self.distributions.items(), self.distributions.keys(), colors)):
+        for i, (distribution, inp_label, color) in enumerate(zip(self.distributions.values(), self.distributions.keys(), colors)):
             if not distribution.is_empty:
-                curr_plot_data, num_dists = self.__get_plotting_data(distribution, per_neuron = not is_per_layer)
+                curr_plot_data = self.__get_plotting_data(distribution, per_neuron = not is_per_layer)
                 if curr_plot_data is not None: 
                     if is_per_layer:
                         plotting_data[inp_label] = curr_plot_data
                     else: 
                         plotting_data[inp_label] = curr_plot_data
 
+
         #TODO: add horizontal slider
         if self.distribution_display_mode == "kde":
             for cat_name in plotting_data.keys():
                 layer_data = plotting_data[cat_name]
-                for i, (x_plot, y_plot) in enumerate(layer_data):
+                for i, (x_plot, y_plot) in enumerate(*layer_data):
                     if not is_per_layer:
                         label = f"{cat_name}: Neuron {i}"
                     else: 
                         label = cat_name
-                    if subplot_index is not None:
+                    if subplot_index is not None and False:
                         fig.add_trace(go.Scatter(name=label, x = x_plot, y = y_plot, mode="lines", fill="tozeroy"), row = subplot_index[0], col = subplot_index[1])
                     else: 
-                        fig.add_trace(go.Scatter(name=label, x = x_plot, y = y_plot, mode="lines", fill="tozeroy"), row = subplot_index[0])
+                        fig.add_trace(go.Scatter(name=label, x = x_plot, y = y_plot, mode="lines", fill="tozeroy"))
         elif self.distribution_display_mode == "bar": 
             for cat_name in plotting_data.keys():
                 layer_data = plotting_data[cat_name]
-                for i, (x_plot, y_plot) in enumerate(layer_data):
+                for i, (x_plot, y_plot) in enumerate(*layer_data):
                     if not is_per_layer:
                         label = f"{cat_name}: Neuron {i}"
                     else: 
@@ -890,7 +889,7 @@ class ActivationModule(torch.nn.Module):
 
     def get_distributions_range(self):
         x_min, x_max = np.inf, -np.inf
-        for dist in self.distributions.items():
+        for dist in self.distributions.values():
             if not dist.is_empty:
                 x_min, x_max = min(x_min, dist.range[0]), max(x_max, dist.range[-1])
                 size = dist.range[1] - dist.range[0]
@@ -911,10 +910,16 @@ class ActivationModule(torch.nn.Module):
         Returns:
             list: A list of Activation Functions.
         """
+        if input_fcts is None and cls.instances is not None: 
+            dict_values = cls.instances.values()
+            instance_list = [single_activation for activation_list in dict_values for single_activation in activation_list]
+            return instance_list
         needsModifying = True
         if input_fcts is None:
             needsModifying = False
             instances_list = cls._get_instances()
+        #TODO: problem, can we somehow solve the problem that if we consecutively call instance list with a network
+        #it will think that they need to be retrieved newly?
         elif isinstance(input_fcts, torch.nn.Module):
             instances_list = get_toplevel_functions(input_fcts, cls)
         elif type(input_fcts) is  list:
@@ -984,17 +989,18 @@ class ActivationModule(torch.nn.Module):
         layout = _get_auto_axis_layout(total)
         rows = layout[0]
         cols = layout[1]
-        colors = create_colors(total)
+        #The below line currently breaks stuff
+        #colors = create_colors(total)
         fig = make_subplots(rows, cols)
+        print(f"Num rows: {rows}, cols: {cols}")
         for curr_row in range(rows):
             for curr_col in range(cols):
                 act = instances_list[curr_row * rows + curr_col]
                 x_act = instances_list[curr_row * rows + curr_col]
-                color = colors[curr_row * rows + curr_col]
-                act.show_plotly(x_act, want_display, tolerance, title, fig,
-                                step, color, [curr_row + 1, curr_col + 1], display = False)
+                act.show_plotly(x_act, display = want_display, tolerance = tolerance, title = title, fig = fig,
+                                step = step, subplot_index = [curr_row + 1, curr_col + 1])
 
-        fig.show()
+        #fig.show()
 
         
 

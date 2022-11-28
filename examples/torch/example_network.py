@@ -4,8 +4,8 @@ from torchvision.transforms import ToTensor
 from torch.utils.data import DataLoader as DL
 import torch.nn as nn
 # import torch.functional as F
-from activations.torch import ReLU
-from activations.torch import ActivationModule
+from activations.torch import ReLU, ActivationModule
+from activations.torch.functions import change_categories
 from torch import optim
 import torch
 
@@ -59,14 +59,18 @@ def load_model(model_name, modeltype=MnistCNN, *args, **kwargs):
     return model
 
 
+import activations.torch.utils.af_utils as af_utils    
 def train(epochs, model, trainDataLoader):
     optimizer = optim.Adam(model.parameters(), lr=0.01)
     lossf = nn.CrossEntropyLoss()
     model.train()
-
+    activation_list = ActivationModule.get_instance_list(input_fcts=model)
+    
     for epoch in range(epochs):
         epoch_loss = 0
         for (batch_image, batch_label) in trainDataLoader:
+            cat_label = af_utils.get_current_label(batch_label)
+            change_categories(activation_list, cat_label)
             output = model(batch_image)
             loss = lossf(output, batch_label)
             optimizer.zero_grad()
@@ -107,15 +111,9 @@ test_data = datasets.FashionMNIST(
     download=True
 )
 
-trainLaoder = DL(train_data, batch_size=64, shuffle=True)
-testLoader = DL(test_data, batch_size=64, shuffle=True)
-
-
 model = MnistCNN()
+category_loader = ReLU.register_dataset(train_data, input_fcts = model, batch_size=64)
+ReLU.print_categories()
+train(1, model, category_loader)
 import ipdb; ipdb.set_trace()
-
-ReLU.save_all_inputs(model)
-#ReLU.register_dataset(trainLaoder)
-#ReLU.print_categories()
-train(1, model, trainLaoder)
 ReLU.show_all()
