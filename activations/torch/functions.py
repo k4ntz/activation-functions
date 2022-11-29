@@ -18,7 +18,7 @@ def change_categories(list_of_activations, value):
     for inst in list_of_activations:
         assert isinstance(inst, ActivationModule), f"{inst} needs to be an ActivationModule activation function"
         inst.change_category(value)
-
+    
 def _save_inputs(self, input, output):
     curr_dist = self.get_current_distribution()
     if curr_dist is None:
@@ -114,7 +114,6 @@ class ActivationModule(torch.nn.Module):
 
         self.distributions[name] = histo
 
-
     @classmethod 
     def print_categories(cls, input_fcts = None): 
         return_instances = cls.get_instance_list(input_fcts)
@@ -163,8 +162,6 @@ class ActivationModule(torch.nn.Module):
 
     def get_current_dist_cat(self):
         return (self.curr_cat_name, self.get_current_distribution())
-
-
 
 
     #TODO Category stuff: 
@@ -504,8 +501,8 @@ class ActivationModule(torch.nn.Module):
 
 
     @classmethod 
-    def register_dataset(cls, dataset, is_overwrite = True, input_fcts = None, bin_width = "auto",
-                        batch_size = 64, shuffle = False, drop_last = False, num_workers = 1):
+    def register_dataset(cls, dataset, mode = "layer", is_overwrite = True, input_fcts = None, bin_width = "auto",
+                        batch_size = 64, shuffle = False, drop_last = False):
         """
         Register a Dataset for a number of ActivationModule functions.
         This will set n output distribution (for n labels) which will be plotted when data flows through 
@@ -523,11 +520,16 @@ class ActivationModule(torch.nn.Module):
 
         instance_list = cls.get_instance_list(input_fcts)
         for instance in instance_list:
+            instance.set_mode(mode)
             instance.register_dataset_test(dataset, is_overwrite, bin_width, is_for_input_dist = True)
-            #instance.register_dataset_test(dataset_labels, is_overwrite, bin_width, is_fo)
     
         from torch.utils.data import DataLoader
         return DataLoader(dataset, batch_sampler=af_utils.CategorySampler(dataset, batch_size, shuffle, drop_last))
+
+    def set_mode(self, value): 
+        assert isinstance(value, str) and value in ["layer", "neurons"], "val needs to be ''layer'' or ''neurons''"
+        #TODO: check whether we allow changing mode anyway?
+        self.dist_mode = value
 
     #TODO: should this just set saving = True? 
     def register_dataset_test(self, dataset, is_overwrite, bin_width, is_for_input_dist = True, auto_stop = False, max_saves = 10):
@@ -748,33 +750,6 @@ class ActivationModule(torch.nn.Module):
                 Passed value is not convertable to number, 
                 staying with original value, which is {self.inp_bin_width}
             ''')
-        
-
-
-    """ @property
-    def current_inp_distribution(self):
-        return self.distributions[-1]
-                
-    @property
-    def current_inp_category(self):
-        return self.categories[-1]
-
-    @current_inp_category.setter
-    def current_inp_category(self, value):
-        value = str(value)
-
-
-        #if the histogram is empty, it means that is was created at the same phase
-        #that the current category is created, which means that no input was perceived
-        #during this time -> redundant category
-    
-        for i in range(len(self.distributions)):
-            if self.distributions[i].is_empty:
-                del self.distributions[i]
-                del self.categories[i]
-        new_distribution = self.histo_func(self.inp_bin_width)
-        self.distributions.append(new_distribution)
-        self.categories.append(value) """
 
     def __is_dist_per_layer(self):
         per_layer = self.dist_mode == "layer"

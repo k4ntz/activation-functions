@@ -139,6 +139,8 @@ class NeuronsHistogram():
         self._is_empty = True
         self._verbose = False
         self.nb_neurons = nb_neurons
+        self._bin_size = bin_size
+        self.__bins = None
         if nb_neurons != "auto":
             self.__bins = [np.array([]) for _ in range(nb_neurons)]
             self.__weights = [np.array([], dtype=np.uint32) for _ in range(nb_neurons)]
@@ -227,6 +229,7 @@ class NeuronsHistogram():
                                                              self._bin_size, self._rd) """
 
     def __repr__(self):
+        #if self.is_empty does not work because the neurons histogram doesnt have __bins
         if self.is_empty:
             rtrn = "Empty Layer Histogram"
         else:
@@ -258,7 +261,7 @@ class NeuronsHistogram():
 
     @property
     def is_empty(self):
-        if self._is_empty is True and len(self.__bins[0]) > 0:
+        if self._is_empty is True and self.__bins is not None and len(self.__bins[0]) > 0:
             self._is_empty = False
         return self._is_empty
 
