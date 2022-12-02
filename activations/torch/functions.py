@@ -348,7 +348,7 @@ class ActivationModule(torch.nn.Module):
             instance.load_state_dict(dicts[i], *args, **kwargs)
         cls.__track_history_multiple_classes(input_fcts, False)
 
-
+    #TODO: this doesnt work for a model
     @classmethod
     def state_dicts(cls, input_fcts = None, *args, **kwargs):
         """Returns a list of state dicts for the input ActivationModules input_fcts. If it is none, 
@@ -703,7 +703,7 @@ class ActivationModule(torch.nn.Module):
         #TODO: remove, testing purposes 
         fig = None
         #Construct x axis
-        if not self.can_show_inp:
+        if not self.can_show_inp and False:
             self.logger.error("Cannot show input distribution, since no inputs were saved for it")
             return
         #create axis range depending on input x
@@ -978,15 +978,15 @@ class ActivationModule(torch.nn.Module):
         #fig.show()
 
         
-
+    #TODO: overrwrite can_show_inp_distr
+    #TODO: load state dict from file, or is it already solved because state_dict itself can be load from file
     def load_state_dict(self, state_dict):
         if "distributions" in state_dict.keys():
             _distributions = state_dict.pop("distributions")
-            _inp_category = state_dict.pop("inp_category")
-            created_distributions, msg = af_utils.create_histograms(_distributions, self.device)
-            self.logger.info(msg)
-            self.distributions = created_distributions
-            self.current_inp_category = _inp_category
+            #TODO: dont think the below 2 lines are needed
+            """ created_distributions, msg = af_utils.create_histograms(_distributions, self.device)
+            self.logger.info(msg) """
+            self.distributions = _distributions
         if "in_grad_dist" in state_dict.keys():
             _in_grad_dist = state_dict.pop("in_grad_dist")
             _out_grad_dist = state_dict.pop("out_grad_dist")
@@ -1000,18 +1000,15 @@ class ActivationModule(torch.nn.Module):
     def state_dict(self, destination=None, *args, **kwargs):
         _state_dict = super().state_dict(destination, *args, **kwargs)
         if self.distributions is not None:
-            saved_distributions = []
-            saved_categories = []
+            saved_distributions = dict()
             for cat_name in self.distributions:
                 curr_dist = self.distributions[cat_name]
                 if curr_dist.is_empty:
                     self.logger.warn(f"Not saving distribution for category {cat_name}, since it is empty")
                 else: 
-                    saved_distributions.append(curr_dist)
-                    saved_categories.append(cat_name)
+                    saved_distributions[cat_name] = curr_dist
 
             _state_dict["distributions"] = saved_distributions
-            _state_dict["inp_category"] = saved_categories
 
         #TODO: do for gradients
         if self._in_grad_dist is not None:

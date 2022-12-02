@@ -65,7 +65,6 @@ def train(epochs, model, trainDataLoader):
     lossf = nn.CrossEntropyLoss()
     model.train()
     activation_list = ActivationModule.get_instance_list(input_fcts=model)
-    
     for epoch in range(epochs):
         epoch_loss = 0
         for (batch_image, batch_label) in trainDataLoader:
@@ -112,8 +111,11 @@ test_data = datasets.FashionMNIST(
 )
 
 model = MnistCNN()
-category_loader = ReLU.register_dataset(train_data, input_fcts = model, batch_size=64)
+category_loader = ReLU.register_dataset(train_data, input_fcts = model, batch_size=64, mode = "layer")
+activation_list = ActivationModule.get_instance_list(input_fcts=model)
 ReLU.print_categories()
 train(1, model, category_loader)
-import ipdb; ipdb.set_trace()
-ReLU.show_all()
+first_state_dict = ReLU.state_dicts(input_fcts=activation_list)[0]
+new_relu = ReLU()
+new_relu.load_state_dict(first_state_dict)
+ReLU.show_all(input_fcts=[new_relu])

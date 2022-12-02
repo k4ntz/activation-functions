@@ -67,7 +67,7 @@ def can_use_cupy(device):
 
 
 def create_histograms(inp_histograms, device, want_cupy=False):
-    created_histograms = []
+    created_histograms = dict()
     can_cupy = can_use_cupy(device) and want_cupy
     msg_npy = "Loading input distributions on numpy histograms"
     #TODO: is there advantage of using numpy when device is cuda?
@@ -85,8 +85,10 @@ def create_histograms(inp_histograms, device, want_cupy=False):
         else: 
             msg = msg_npy
         from activations.torch.utils.histograms_numpy import Histogram
-        for hist in inp_histograms:
-                created_histograms.append(__create_single_hist(hist, Histogram))
+        import ipdb; ipdb.set_trace()
+        for cat_name in inp_histograms.keys():
+            hist = 
+            created_histograms.append(__create_single_hist(hist, Histogram))
 
 
     return created_histograms, msg
