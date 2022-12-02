@@ -87,7 +87,6 @@ def create_histograms(inp_histograms, device, want_cupy=False):
         from activations.torch.utils.histograms_numpy import Histogram
         import ipdb; ipdb.set_trace()
         for cat_name in inp_histograms.keys():
-            hist = 
             created_histograms.append(__create_single_hist(hist, Histogram))
 
 
